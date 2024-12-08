@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH --job-name=fastqc_quality_check
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --output=fastqc.log
+#SBATCH --error=fastqc.err
+#SBATCH --time=0-20:00:00
+#SBATCH --mem=64GB
+
+module load bio/FastQC/0.11.9-Java-11
+
+cd /lustre/miifs01/project/m2_jgu-salmosex/nina/data/01_koppert/
+fastqc --nogroup -t 2 *.fq.gz 
+
