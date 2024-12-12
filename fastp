@@ -1,0 +1,40 @@
+#!/bin/bash
+
+#SBATCH --job-name=fastp_quality326162_check
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --output=fastp.log
+#SBATCH --error=fastp.err
+#SBATCH --time=0-20:00:00
+#SBATCH --mem=64GB
+
+# Load the module
+module load bio/fastp/0.20.1-GCC-8.3.0
+
+# set my directory
+cd /lustre/miifs01/project/m2_jgu-salmosex/nina/data
+
+# Create a directory for filtered reads
+mkdir -p filteredReads326162
+
+# Copy raw data files into the filteredReads directory
+cp /lustre/miifs01/project/m2_jgu-salmosex/nina/data/326162/*.fastq.gz filteredReads326162/
+
+# Run fastp with the adjusted parameters 
+for file in /lustre/miifs01/project/m2_jgu-salmosex/nina/data/326162/*_1.fastq.gz; do
+  base=$(basename "$file" _1.fastq.gz)
+  file_2="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/326162/${base}_2.fastq.gz"
+
+  fastp \
+    -i "$file" \
+    -I "$file_2" \
+    -o "/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filteredReads326162/${base}_1_filtered.fastq.gz" \
+    -O "/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filteredReads326162/${base}_2_filtered.fastq.gz" \
+    --qualified_quality_phred 20 \
+    -u 40 \
+    --n_base_limit 10 \
+    --length_required 50 \
+    --detect_adapter_for_pe \
+    --html "/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filteredReads326162/${base}_report.html" \
+    --json "/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filteredReads326162/${base}_report.json"
+done
