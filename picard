@@ -1,0 +1,35 @@
+module load bio/picard/2.6.0-Java-1.8.0_131
+
+#This code I used to add read group information, this is very essential, since I forgot this step during mapping and it is 
+#needed for variant calling. When performing vc I should always use picard data! 
+# Set the directories
+INPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/filteredReads795403/mapping/org_alignment/original_bam_files/"
+OUTPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/filteredReads795403/mapping/org_alignment/original_bam_files/picard_rg"
+TEMP_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/temp"
+
+mkdir -p "${OUTPUT_DIR}" "${TEMP_DIR}"
+
+mkdir -p "${OUTPUT_DIR}" "${TEMP_DIR}"
+
+# Add read groups to each BAM file
+for BAM_FILE in "${INPUT_DIR}"/*.bam; do
+    SAMPLE_NAME=$(basename "${BAM_FILE}" .bam)
+
+    RG_ID="${SAMPLE_NAME}"
+    RG_SM="${SAMPLE_NAME}"
+    RG_PL="ILLUMINA"
+    RG_LB="${SAMPLE_NAME}_lib"
+    RG_PU="${SAMPLE_NAME}_unit1"
+
+    # Add read group information
+    java -Xmx16G -Djava.io.tmpdir="${TEMP_DIR}" -jar $EBROOTPICARD/picard.jar AddOrReplaceReadGroups \
+        I="${BAM_FILE}" \
+        O="${OUTPUT_DIR}/${SAMPLE_NAME}_rg.bam" \
+        RGID="${RG_ID}" \
+        RGLB="${RG_LB}" \
+        RGPL="${RG_PL}" \
+        RGPU="${RG_PU}" \
+        RGSM="${RG_SM}" \
+        CREATE_INDEX=true
+done
+
