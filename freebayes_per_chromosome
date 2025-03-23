@@ -1,0 +1,29 @@
+
+# List of chromosome names in b. terrestris (18 Chromosome in total) this is leaving out the NW (which $
+CHROMS=(
+    NC_015762.1 NC_015763.1 NC_015764.1 NC_015765.1 NC_015766.1
+    NC_015767.1 NC_015768.1 NC_015769.1 NC_015770.1 NC_015771.1
+    NC_015772.1 NC_015773.1 NC_015774.1 NC_015775.1 NC_015776.1
+    NC_015777.1 NC_015778.1 NC_015779.1
+)
+# Select the chromosome for this job using the SLURM array index
+CHR=${CHROMS[$SLURM_ARRAY_TASK_ID - 1]}
+
+# List all BAM files
+BAM_FILES=$(ls "$INPUT_DIR"/*.bam | tr '\n' ' ')
+
+# Run FreeBayes only on the selected chromosome
+freebayes -f "$REFERENCE_GENOME" -r "$CHR" $BAM_FILES \
+    --ploidy 2 \
+    --report-genotype-likelihood-max \
+    --use-mapping-quality \
+    --genotype-qualities \
+    --use-best-n-alleles 4 \
+    --haplotype-length 0 \
+    --min-base-quality 3 \
+    > "${OUTPUT_DIR}/variants_${CHR}.vcf"
+
+echo "Variant calling complete for chromosome $CHR. Output: ${OUTPUT_DIR}/variants_${CHR}.vcf"
+
+
+
