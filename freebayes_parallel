@@ -1,0 +1,35 @@
+
+module load bio/freebayes/1.3.6-foss-2021b-R-4.1.2
+
+INPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/filteredReads870415/mapping/$
+OUTPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/filteredReads870415/mapping$
+REFERENCE_GENOME="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/reference_genomes/iyBomTerr1.2.fna"
+
+mkdir -p "${OUTPUT_DIR}"
+
+#--------------------------------------------------------------------------------------------------
+
+#ACTUAL VC
+#------------------------------------------------------------------------------------------------
+
+
+# Generate regions for parallel processing
+fasta_generate_regions.py "$REFERENCE_GENOME.fai" 100000 > regions15.txt
+
+# List all BAM files
+BAM_FILES=$(ls "$INPUT_DIR"/*.bam | tr '\n' ' ')
+
+# Run FreeBayes in parallel with my old parameters
+freebayes-parallel regions15.txt 4 -f "$REFERENCE_GENOME" $BAM_FILES \
+    --ploidy 1 \
+    --report-genotype-likelihood-max \
+    --use-mapping-quality \
+    --genotype-qualities \
+    --use-best-n-alleles 4 \
+    --haplotype-length 0 \
+    --min-base-quality 3 \
+    > "${OUTPUT_DIR}/combined_variants.vcf"
+
+echo "Variant calling complete. Output: ${OUTPUT_DIR}/combined_variants.vcf"
+
+
