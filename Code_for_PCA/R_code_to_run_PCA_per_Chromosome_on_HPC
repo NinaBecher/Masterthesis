@@ -1,0 +1,245 @@
+#!/usr/bin/env Rscript
+#--------------------------------------------------------------------------------
+# LOADING STATION 
+#---------------------------------------------------------------------------------
+
+# List of required libraries
+libraries <- c("gdsfmt",
+               "SNPRelate",
+               "ggplot2",
+               "ggpubr",
+               "reshape2")
+
+# Loop through libraries, install if missing, then load
+for (lib in libraries) {
+  if (require(package = lib, character.only = TRUE)) {
+    print(paste0("Library '", lib, "' loaded successfully."))
+  } else {
+    print(paste0("Library '", lib, "' not found. Attempting to install..."))
+    # Check if BiocManager is installed, if not, install it
+    if (!requireNamespace("BiocManager", quietly = TRUE)) {
+      install.packages("BiocManager")
+    }
+    # Install the library using BiocManager (for Bioconductor packages like gdsfmt, SNPRelate)
+    # or install.packages (for CRAN packages like ggplot2, ggpubr, reshape2)
+    if (lib %in% c("gdsfmt", "SNPRelate")) {
+      BiocManager::install(lib, suppressUpdates = TRUE, ask = FALSE)
+    } else {
+      install.packages(lib, dependencies = TRUE)
+    }
+    library(lib, character.only = TRUE)
+    print(paste0("Library '", lib, "' installed and loaded."))
+  }
+}
+
+# Create a directory for results if it doesn't already exist
+# This will create a 'results' folder in the current working directory of the script.
+dir.create("results", showWarnings = FALSE)
+
+
+#-------------------------------------------------------------------------------
+# SPECIFYING PARAMETERS FROM COMMAND LINE 
+#-------------------------------------------------------------------------------
+
+## Capture command line arguments
+args           <- commandArgs(TRUE)
+
+# Assign arguments to variables
+input          <- args[1]             # Path to the input VCF file
+slide_max      <- as.numeric(args[3]) # Maximum base pairs per sliding window for LD pruning
+slide_snp      <- as.numeric(args[4]) # Maximum number of SNPs per window for LD pruning
+ld_threshold   <- as.numeric(args[5]) # R-squared threshold for LD pruning
+output_job_dir <- args[6]             # Unique output directory for this job's results
+exclude_samples_file_path <- args[7]  # Path to file with sample IDs to exclude
+job_run_name_R <- args[8]             # Unique identifier for this PCA run, passed from SLURM
+# Removed args[9] (target_chromosome_R) as it's now handled internally
+
+
+#-------------------------------------------------------------------------------
+# SET UP UNIQUE OUTPUT DIRECTORY
+#-------------------------------------------------------------------------------
+
+# Create the unique output directory for this job's results
+dir.create(output_job_dir, recursive = TRUE, showWarnings = FALSE)
+print(paste0("All results for this job will be saved in: ", output_job_dir))
+
+
+#-------------------------------------------------------------------------------
+# TRANSFORMATION INTO GENOME DATA STRUCTURE (GDS) FOR EFFICIENT HANDLING 
+#-------------------------------------------------------------------------------
+
+## Assign the input VCF file path
+input_vcf      <- input
+
+## Define the name for the GDS file (derived from the VCF input file name)
+gds_file_name <- gsub(pattern = ".vcf.gz$",
+                      replacement = ".gds",
+                      basename(input_vcf))
+input_vcf_gds <- file.path(output_job_dir, gds_file_name)
+
+
+## Convert VCF to GDS format
+tryCatch({
+  snpgdsVCF2GDS(input_vcf,
+                input_vcf_gds,
+                method = "biallelic.only")
+  print("VCF to GDS conversion successful.")
+}, error = function(e) {
+  stop(paste("ERROR: VCF to GDS conversion failed:", e$message))
+})
+
+
+## Open the created GDS file for subsequent analysis
+tryCatch({
+  input_vcf_gds_genofile <- snpgdsOpen(input_vcf_gds)
+  print("GDS file opened successfully.")
+}, error = function(e) {
+  stop(paste("ERROR: Could not open GDS file:", e$message))
+})
+
+
+#-------------------------------------------------------------------------------
+# SAMPLE EXCLUSION 
+#-------------------------------------------------------------------------------
+
+# Get all sample IDs from the GDS file
+all_gds_sample_ids <- read.gdsn(index.gdsn(input_vcf_gds_genofile, "sample.id"))
+selected_sample_ids <- all_gds_sample_ids # Start with all samples
+
+# Check if an exclusion file path was provided and if it's not "NONE"
+if (!is.na(exclude_samples_file_path) && exclude_samples_file_path != "NONE") {
+  if (file.exists(exclude_samples_file_path)) {
+    excluded_samples <- readLines(exclude_samples_file_path)
+    excluded_samples <- excluded_samples[nchar(excluded_samples) > 0] 
+    
+    initial_sample_count <- length(selected_sample_ids)
+    selected_sample_ids <- setdiff(selected_sample_ids, excluded_samples)
+    excluded_count <- initial_sample_count - length(selected_sample_ids)
+    
+    print(paste0("Excluding ", excluded_count, " samples from the analysis."))
+    if (excluded_count > 0) {
+      print(paste0("Excluded sample IDs: ", paste(setdiff(all_gds_sample_ids, selected_sample_ids), collapse = ", ")))
+    }
+    
+    if (length(selected_sample_ids) == 0) {
+      stop("ERROR: All samples were excluded or no valid samples remain after exclusion. PCA cannot be performed.")
+    }
+  } else {
+    warning(paste0("Exclusion file not found at: ", exclude_samples_file_path, ". All samples will be included."))
+  }
+} else {
+  print("No sample exclusion file provided or 'NONE' specified. All samples will be included.")
+}
+
+
+#-------------------------------------------------------------------------------
+# AUTOMATED PER-CHROMOSOME PCA LOOP (NEW SECTION)
+#-------------------------------------------------------------------------------
+
+# Get information about all SNPs in the GDS file
+all_gds_snps_info <- snpgdsSNPList(input_vcf_gds_genofile)
+
+# Get a unique list of all chromosome names
+unique_chromosomes <- unique(all_gds_snps_info$chromosome)
+print(paste0("Identified ", length(unique_chromosomes), " chromosomes for analysis: ", paste(unique_chromosomes, collapse = ", ")))
+
+
+# Loop through each unique chromosome and perform PCA
+for (current_chromosome in unique_chromosomes) {
+  print(paste0("--- Starting PCA for chromosome: ", current_chromosome, " ---"))
+
+  # Filter SNPs to include only those on the current chromosome
+  snps_on_current_chrom <- all_gds_snps_info$snp.id[all_gds_snps_info$chromosome == current_chromosome]
+  
+  if (length(snps_on_current_chrom) == 0) {
+    warning(paste0("WARNING: No SNPs found for chromosome: ", current_chromosome, ". Skipping PCA for this chromosome."))
+    next # Skip to the next chromosome in the loop
+  }
+
+  # Reset autosome_only_setting as we are explicitly selecting chromosomes
+  # This ensures that snpgdsLDpruning and snpgdsPCA use only the SNPs provided in snp.id
+  autosome_only_setting <- FALSE 
+
+  #--------------------------------------------------------------------------------
+  # LD PRUNING - ENSURING INDEPENDENT SNPS FOR PCA (per chromosome)
+  #--------------------------------------------------------------------------------
+
+  ## Perform Linkage Disequilibrium (LD) pruning for the current chromosome
+  tryCatch({
+    snpset <- snpgdsLDpruning(input_vcf_gds_genofile,
+                              sample.id = selected_sample_ids, # Use only selected samples
+                              snp.id = snps_on_current_chrom, # Only SNPs on current chromosome
+                              slide.max.bp = slide_max,
+                              slide.max.n = slide_snp,
+                              ld.threshold = ld_threshold,
+                              autosome.only = autosome_only_setting)
+    print(paste0(length(unlist(unname(snpset))), " markers selected for chromosome ", current_chromosome, " after LD pruning."))
+  }, error = function(e) {
+    warning(paste("WARNING: LD pruning failed for chromosome", current_chromosome, ":", e$message, "Skipping PCA for this chromosome."))
+    next # Skip to the next chromosome in the loop
+  })
+
+  ## Flatten the list of selected SNP IDs into a simple vector
+  snpset.id <- unlist(unname(snpset))
+
+  if (length(snpset.id) == 0) {
+    warning(paste0("WARNING: No SNPs remaining after LD pruning for chromosome: ", current_chromosome, ". Skipping PCA for this chromosome."))
+    next # Skip to the next chromosome in the loop
+  }
+
+  ## Subset the full SNP list to keep only the IDs that were retained after LD pruning
+  snpset_df <- subset(all_gds_snps_info, snp.id %in% snpset.id)
+
+  ## Write the dataframe containing subsetted SNP locations to a text file (per chromosome)
+  snpset_file_name_txt <- paste0("snpset_", job_run_name_R, "_chrom_", current_chromosome, "_", 
+                                 slide_max, "_", slide_snp, "_", ld_threshold, ".txt")
+  write.table(snpset_df,
+              file = file.path(output_job_dir, snpset_file_name_txt),
+              col.names = FALSE,
+              row.names = FALSE,
+              quote = FALSE,
+              sep = "\t")
+
+
+  #-------------------------------------------------------------------------------
+  # PERFORM PRINCIPAL COMPONENT ANALYSIS (PCA) WITH PRUNED DATA (per chromosome)
+  #-------------------------------------------------------------------------------
+
+  ## Execute PCA and store the results
+  tryCatch({
+    pca            <- snpgdsPCA(input_vcf_gds_genofile,
+                                sample.id = selected_sample_ids, # PCA only on selected samples
+                                num.thread = 40,        # Number of CPU threads to use for parallel processing
+                                snp.id = snpset.id,     # Use only the LD-pruned SNPs for current chromosome
+                                autosome.only = autosome_only_setting)
+    print(paste0("PCA calculation successful for chromosome: ", current_chromosome, "."))
+  }, error = function(e) {
+    warning(paste("WARNING: PCA calculation failed for chromosome", current_chromosome, ":", e$message, "Skipping saving results for this chromosome."))
+    next # Skip to the next chromosome in the loop
+  })
+
+
+  ## Calculate the percentage of variance explained by each principal component
+  pc_percent     <- pca$varprop * 100
+  print(paste0("Variance explained by principal components (PCs) for chromosome ", current_chromosome, ":"))
+  print(round(pc_percent[1:min(10, length(pc_percent))], 2)) # Print top 10 or fewer PCs
+
+
+  # Save the PCA results (pca object and snpset_df) for the current chromosome.
+  pca_results_file_name <- paste0("pca_results_", tools::file_path_sans_ext(basename(input_vcf), TRUE), "_", 
+                                  job_run_name_R, "_chrom_", current_chromosome, ".RData") 
+  tryCatch({
+    save(pca, snpset_df, file = file.path(output_job_dir, pca_results_file_name))
+    print(paste0("PCA results for chromosome ", current_chromosome, " saved to ", file.path(output_job_dir, pca_results_file_name)))
+  }, error = function(e) {
+    warning(paste("WARNING: Failed to save RData file for chromosome", current_chromosome, ":", e$message))
+  })
+} # End of chromosome loop
+
+
+# Close the GDS file to release system resources
+snpgdsClose(input_vcf_gds_genofile)
+
+print("All per-chromosome PCA analyses complete (metadata assignment and plotting will be done locally).")
+print(paste0("All raw PCA results are in the directory: ", output_job_dir))
+
