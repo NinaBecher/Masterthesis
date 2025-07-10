@@ -1,0 +1,40 @@
+#!/bin/bash
+#SBATCH --job-name=PCA_run5
+#SBATCH --partition=parallel
+#SBATCH -C skylake
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --output=PCA_pca5_%j.log
+#SBATCH --error=PCA_pca5_%j.err
+#SBATCH --time=0-90:00:00
+#SBATCH --mem=64GB
+#SBATCH --cpus-per-task=4
+
+JOB_RUN_NAME="pca5"
+
+INPUT_VCF="/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/filtered_and_imputed_nrg_vcffiltered.vcf.gz"
+
+SCRIPT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts"
+
+OUTPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/results/PCA_by_chrom_org"
+
+EXCLUDE_SAMPLES_FILE="${SCRIPT_DIR}/excluded_samples.txt"
+
+slide_max=100000
+slide_snp=1000
+ld_threshold=0.1
+
+UNUSED_OUTPUT_PLACEHOLDER="."
+
+module load bio/R-bundle-Bioconductor/3.15-foss-2021b-R-4.2.0
+
+cd "$SCRIPT_DIR" || { echo "Error: Could not change to script directory."; exit 1; }
+
+Rscript PCAchromosome.R \
+  "$INPUT_VCF" \
+  "$UNUSED_OUTPUT_PLACEHOLDER" \
+  "$slide_max" \
+  "$slide_snp" \
+  "$ld_threshold" \
+  "$OUTPUT_DIR" \
+  "$EXCLUDE_SAMPLES_FILE" \
+  "$JOB_RUN_NAME"
