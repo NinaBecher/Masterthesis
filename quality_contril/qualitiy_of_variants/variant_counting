@@ -1,0 +1,33 @@
+#!/bin/bash
+#SBATCH --job-name=vcf_variant_counts_unique
+#SBATCH --output=vcf_variant_counts_unique.out
+#SBATCH --error=vcf_variant_counts_unique.err
+#SBATCH --time=01:00:00
+#SBATCH --mem=80G
+#SBATCH --cpus-per-task=1
+#SBATCH --partition=parallel
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH -C skylake
+
+# Load bcftools module
+module load bio/BCFtools/1.14-GCC-11.2.0
+
+# Path to VCF file
+VCF="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_nrg/variantcalling/filtered_variants/vcf_imputed/vcf_with_imputed_unique_sites.vcf.gz"
+
+# Output directory
+OUT_DIR=$(dirname "$VCF")
+
+# Output file paths
+CHROM_COUNTS="$OUT_DIR/variant_counts_per_chromosome_unique_sites.txt"
+TOTAL_COUNT="$OUT_DIR/total_variant_count_unique_sites.txt"
+
+echo "Counting variants per chromosome..."
+
+bcftools query -f '%CHROM\n' "$VCF" | sort | uniq -c | sort -k2 > "$CHROM_COUNTS"
+
+echo "Counting total number of variants..."
+
+bcftools view -H "$VCF" | wc -l > "$TOTAL_COUNT"
+
+echo "Done."
