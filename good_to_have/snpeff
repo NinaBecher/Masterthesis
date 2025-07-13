@@ -1,0 +1,47 @@
+#!/bin/bash
+#SBATCH --job-name=snpeff_annotate
+#SBATCH --output=snpeff_annotate_%j.out
+#SBATCH --error=snpeff_annotate_%j.err
+#SBATCH --time=08:00:00
+#SBATCH --mem=32G
+#SBATCH --cpus-per-task=4
+#SBATCH -C skylake
+#SBATCH --partition=parallel
+#SBATCH --account=m2_jgu-salmosex
+
+# --- Load modules ---
+module load lang/Anaconda3/2023.03
+module load devel/Java/17
+module load bio/HTSlib/1.14-GCC-11.2.0
+module load bio/BCFtools/1.14-GCC-11.2.0
+
+# --- Activate conda environment ---
+eval "$(conda shell.bash hook)"
+conda activate snpeff_env
+
+# --- Variables ---
+SNPEFF_JAR="/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/snpEff/snpEff.jar"
+GENOME="Bombus_terrestris"
+INPUT_VCF="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/annotation/renamed_filtered_variants.vcf.gz"
+OUTPUT_DIR=$(dirname "$INPUT_VCF")
+BASENAME=$(basename "$INPUT_VCF" .vcf.gz)
+ANNOTATED_VCF="${OUTPUT_DIR}/${BASENAME}_annotated.vcf"
+ANNOTATED_VCF_GZ="${ANNOTATED_VCF}.gz"
+STATS_HTML="${OUTPUT_DIR}/${BASENAME}_snpeff_stats.html"
+
+mkdir -p "$OUTPUT_DIR"
+
+# --- Run SnpEff ---
+echo "Annotating $INPUT_VCF..."
+if java -Xmx7g -jar "$SNPEFF_JAR" -v "$GENOME" "$INPUT_VCF" > "$ANNOTATED_VCF"; then
+    echo "Annotation done. Generating stats and compressing..."
+    
+    java -jar "$SNPEFF_JAR" stats "$ANNOTATED_VCF" > "$STATS_HTML"
+    bgzip -f "$ANNOTATED_VCF"
+    bcftools index --csi "$ANNOTATED_VCF_GZ"
+    
+    echo "All steps completed successfully."
+else
+    echo "Annotation failed." >&2
+    exit 1
+fi
