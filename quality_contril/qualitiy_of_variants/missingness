@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --job-name=vcftools_missing
+#SBATCH -C skylake 
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=1-00:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH -o missing.out
+#SBATCH -e missing.err
+
+# Load the required module
+module load bio/VCFtools/0.1.16-GCC-11.2.0
+
+# Change to the working directory
+
+cd /lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/filteredReads870415/mapping/nrg_alignment/variantcalling/
+# Run VCFtools to calculate missing individual data
+vcftools --gzvcf combined_variants.vcf.gz --missing-indv --out missing_indiv
+
+# Run VCFtools to calculate missing site data
+vcftools --gzvcf combined_variants.vcf.gz --missing-site --out missing_site
