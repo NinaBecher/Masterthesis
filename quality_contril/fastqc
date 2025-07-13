@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH --job-name=fastqc_quality_check
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --output=fastqc.log
+#SBATCH --error=fastqc.err
+#SBATCH --time=0-20:00:00
+#SBATCH --mem=64GB
+
+#In essence, FastQC performs quality control checks on raw sequencing data. 
+#loading the module I need, which in this case is a preexisting module on my HPC (FastQC) 
+module load bio/FastQC/0.11.9-Java-11
+
+#then I specify the location of my raw sequences I want to analyse and run the fastqc command
+cd /lustre/miifs01/project/m2_jgu-salmosex/nina/data/01_koppert/
+fastqc --nogroup -t 2 *.fq.gz 
