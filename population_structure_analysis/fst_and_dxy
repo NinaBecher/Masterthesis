@@ -1,0 +1,48 @@
+#!/bin/bash
+#SBATCH --job-name=Pixy_Simple
+#SBATCH --partition=parallel
+#SBATCH -C skylake
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=2-00:00:00
+#SBATCH --mem=100GB
+#SBATCH --cpus-per-task=4
+#SBATCH --output=/lustre/miifs01/project/m2_jgu-salmosex/nina/results/pixy_%j.out
+#SBATCH --error=/lustre/miifs01/project/m2_jgu-salmosex/nina/results/pixy_%j.err
+
+# Setting up the file paths for the input data and where I want the results to go
+VCF_INPUT="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/filtered_variants.vcf.gz"
+POP_MAP="/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/pop.txt"  # population map file
+EXCLUDE="/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/excluded_samples.txt"  # list of samples to leave out
+OUTPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/results/pixy_output_commercial_strict_by_supplier"
+TEMP_VCF="${OUTPUT_DIR}/temp_filtered.vcf.gz"  # will use this only if we need to exclude samples
+
+# Make sure output folder exists, and load conda + the pixy environment
+mkdir -p "$OUTPUT_DIR"
+module purge
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate pixy || { echo "Could not activate 'pixy' conda env"; exit 1; }
+
+# If there's a list of samples to exclude, remove them from the VCF
+if [ -s "$EXCLUDE" ]; then
+    module load bio/VCFtools/0.1.16-GCC-11.2.0
+    vcftools --gzvcf "$VCF_INPUT" --remove "$EXCLUDE" --recode --recode-INFO-all --stdout | bgzip -c > "$TEMP_VCF"
+    tabix -p vcf "$TEMP_VCF"
+    VCF="$TEMP_VCF"
+    module unload bio/VCFtools/0.1.16-GCC-11.2.0
+else
+    VCF="$VCF_INPUT"
+fi
+
+# Run pixy using the VCF and population map
+# We're calculating dxy, fst, and pi in windows of 10kb
+pixy --vcf "$VCF" \
+     --populations "$POP_MAP" \
+     --window_size 10000 \
+     --output_folder "$OUTPUT_DIR" \
+     --stats dxy fst pi \
+     --n_cores $SLURM_CPUS_PER_TASK \
+     --bypass_invariant_check
+
+# Remove the temp VCF if it was made (to save space)
+[ -f "$TEMP_VCF" ] && rm "$TEMP_VCF" "$TEMP_VCF.tbi"
+conda deactivate
