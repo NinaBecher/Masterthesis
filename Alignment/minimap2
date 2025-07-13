@@ -1,0 +1,29 @@
+#this code mapps the genomes of my data to a refernce, in this case the new reference genome! I used the programm Minimap 2 to do so 
+# Load modules
+module load bio/minimap2/2.24-GCCcore-11.2.0
+module load bio/SAMtools/1.14-GCC-11.2.0
+
+# Set the directories I need! 
+INPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/filteredReads795403/fastq_missing/fastq_data"
+REFERENCE="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/reference_genomes/iyBomTerr1.2.fna"
+OUTPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/filteredReads795403/mapping/nrg_alignment/original_bam_files/"
+
+
+# Process paired-end reads this time
+for R1_FILE in "${INPUT_DIR}"/*_1_filtered.fastq.gz; do
+    SAMPLE_NAME=$(basename "${R1_FILE}" _1_filtered.fastq.gz)
+    R2_FILE="${INPUT_DIR}/${SAMPLE_NAME}_2_filtered.fastq.gz"
+
+    if [[ -f "${R2_FILE}" ]]; then
+        echo "Processing sample: ${SAMPLE_NAME}"
+
+        # Align paired-end reads and convert to BAM
+        minimap2 -ax sr -t 8 "${REFERENCE}" "${R1_FILE}" "${R2_FILE}" | \
+        samtools sort -@ 8 -o "${OUTPUT_DIR}/${SAMPLE_NAME}.bam" -
+
+        # Create BAM index
+        samtools index "${OUTPUT_DIR}/${SAMPLE_NAME}.bam"
+    else
+        echo "Missing R2 file for sample: ${SAMPLE_NAME}, skipping."
+    fi
+done
