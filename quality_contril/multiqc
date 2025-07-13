@@ -1,0 +1,15 @@
+#!/bin/bash
+
+#SBATCH --job-name=multiqc_quality_check
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --output=multiqc.log
+#SBATCH --error=multiqc.err
+#SBATCH --time=0-20:00:00
+#SBATCH --mem=64GB
+
+module load bio/MultiQC/1.7-foss-2018a-Python-3.6.4
+
+/lustre/miifs01/project/m2_jgu-salmosex/nina/data/01_koppert/
+
+multiqc . -o /lustre/miifs01/project/m2_jgu-salmosex/nina/data/516678/multiqc_report/
