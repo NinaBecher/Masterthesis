@@ -1,0 +1,40 @@
+#!/bin/bash
+#SBATCH -C skylake
+#SBATCH --job-name=vcftools_filter
+#SBATCH --output=vcftools_filtermissnrg.out
+#SBATCH --error=vcftools_filtermissnrg.err
+#SBATCH --time=10:00:00
+#SBATCH --mem=60G
+#SBATCH --cpus-per-task=1
+#SBATCH --partition=parallel
+#SBATCH --account=m2_jgu-salmosex
+
+# Load required modules
+module load bio/VCFtools/0.1.16-GCC-11.2.0
+module load bio/BCFtools/1.14-GCC-11.2.0
+
+# Define input VCF
+VCF_INPUT="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_nrg/variantcalling/merged_vcf_allnrg.vcf.gz"
+
+# Get input directory
+INPUT_DIR=$(dirname "$VCF_INPUT")
+OUTPUT_BASENAME="filtered_vcf_wo_missing"
+TEMP_PREFIX="$INPUT_DIR/temp_filtered_nomiss"
+
+# Filter VCF file
+vcftools --gzvcf "$VCF_INPUT" \
+    --remove-indels \
+    --minQ 20 \
+    --max-meanDP 100 \
+    --min-alleles 2 --max-alleles 2 \
+    --mac 2 \
+    --recode --recode-INFO-all \
+    --out "$TEMP_PREFIX"
+
+# Compress and index the  file
+bgzip -c "${TEMP_PREFIX}.recode.vcf" > "$INPUT_DIR/${OUTPUT_BASENAME}.vcf.gz"
+tabix -p vcf "$INPUT_DIR/${OUTPUT_BASENAME}.vcf.gz"
+
+# clean up intermediate
+rm -f "${TEMP_PREFIX}.recode.vcf"
+
