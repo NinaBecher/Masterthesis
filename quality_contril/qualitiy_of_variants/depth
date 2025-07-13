@@ -1,0 +1,21 @@
+#!/bin/bash
+#SBATCH -C skylake
+#SBATCH --job-name=vcftools_missing
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=1-00:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH -o depth.out
+#SBATCH -e depth.err
+
+# Load the required module
+module load bio/VCFtools/0.1.16-GCC-11.2.0
+
+# Change to the working directory
+cd /lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/filteredReads870415/mapping/nrg_alignment/variantcalling
+ 
+# Run VCFtools for individual depth stats
+vcftools --gzvcf combined_variants.vcf.gz --depth --out merged_bioproject_depth
+# Run VCFtools for site-specific depth stats
+vcftools --gzvcf combined_variants.vcf.gz --site-mean-depth --out merged_bioproject_site_mean_depth
