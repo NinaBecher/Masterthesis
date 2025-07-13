@@ -1,0 +1,26 @@
+#I use this code to call variants with the program freebayes parallel. It also shows all parameters I chose for VC
+module load bio/freebayes/1.3.6-foss-2021b-R-4.1.2
+
+INPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/kb_picard_nrg/"
+OUTPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/kb_picard_nrg/variantcalling_new"
+REFERENCE_GENOME="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/reference_genomes/iyBomTerr1.2.fna"
+
+mkdir -p "${OUTPUT_DIR}"
+
+
+# Generate regions for parallel processing
+fasta_generate_regions.py "$REFERENCE_GENOME.fai" 100000 > regions44.txt
+
+# List all BAM files
+BAM_FILES=$(ls "$INPUT_DIR"/*.bam | tr '\n' ' ')
+
+# Run FreeBayes in parallel with my old parameters
+freebayes-parallel regions44.txt 4 -f "$REFERENCE_GENOME" $BAM_FILES \
+    --ploidy 1 \
+    --report-genotype-likelihood-max \
+    --use-mapping-quality \
+    --genotype-qualities \
+    --use-best-n-alleles 4 \
+    --haplotype-length 0 \
+    --min-base-quality 3 \
+    > "${OUTPUT_DIR}/combined_variants.vcf"
