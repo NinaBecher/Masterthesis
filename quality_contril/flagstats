@@ -1,0 +1,47 @@
+#!/bin/bash
+#SBATCH --job-name=flagstat_795403
+#SBATCH --output=flagstat_795403.out
+#SBATCH --error=flagstat_795403.err
+#SBATCH --time=4:00:00
+#SBATCH --mem=4G
+#SBATCH --cpus-per-task=1
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH -C skylake
+
+# Set folders where the input BAM files are and where to save the results
+INPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/filteredReads628944/mapping/nrg_alignment/picard_rg/"
+OUTPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/qc_reports/flagstat_628944nrg"
+
+mkdir -p "${OUTPUT_DIR}"
+
+# Load samtools
+module load bio/SAMtools/1.17-GCC-12.2.0
+
+echo "Running samtools flagstat..."
+echo "Reading from: ${INPUT_DIR}"
+echo "Saving to: ${OUTPUT_DIR}"
+echo "-----------------------------"
+
+# Go through each BAM file and run flagstat
+for bam_file in "${INPUT_DIR}"/*.bam; do
+    if [ -f "${bam_file}" ]; then
+        sample_name=$(basename "${bam_file}" .bam)
+        output_report="${OUTPUT_DIR}/${sample_name}_flagstat.txt"
+        
+        echo "Working on ${sample_name}..."
+
+        samtools flagstat "${bam_file}" > "${output_report}"
+
+        if [ $? -eq 0 ]; then
+            echo "Finished: ${output_report}"
+        else
+            echo "Something went wrong with ${sample_name}"
+        fi
+    else
+        echo "No BAM files found or file is invalid: ${bam_file}"
+    fi
+done
+
+echo "-----------------------------"
+echo "All done!"
