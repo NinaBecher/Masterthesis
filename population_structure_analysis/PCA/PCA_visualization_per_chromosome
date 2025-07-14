@@ -1,0 +1,199 @@
+# ------------------------------------------------------------------------------
+# Author: Nina Becher
+# Description: Visualizes PCA results for a single chromosome PCA file
+# ------------------------------------------------------------------------------
+library(ggplot2)
+library(ggpubr)
+library(ggrepel)
+library(RColorBrewer)
+library(tools)
+
+# ------------------------------------------------------------------------------
+# Set Paths and Load Metadata
+# ------------------------------------------------------------------------------
+pca_dir <- "C:/Users/User/Documents/Masterthesis/Results_ORG/PCA/perchromosome"
+setwd(pca_dir)
+
+# Load metadata only once
+pop <- read.table("../population_information.txt", header = FALSE, stringsAsFactors = FALSE)
+colnames(pop) <- c("sample", "bioproject")
+
+sample_origin <- read.table("../sample_type_information.txt", header = FALSE, stringsAsFactors = FALSE)
+colnames(sample_origin) <- c("sample", "origin")
+
+# ------------------------------------------------------------------------------
+# LOAD ONE PCA FILE AT A TIME # Example: NC_015776.1 chromosome
+# ------------------------------------------------------------------------------
+load("pca_results_filtered_variants_pca_per_chrom_org_chrom_NC_015762.1.RData")
+
+# ------------------------------------------------------------------------------
+# Extract NC_ Number from File Name (for Plot Titles)
+# ------------------------------------------------------------------------------
+file_name <- "pca_results_filtered_variants_pca_per_chrom_org_chrom_NC_015762.1.RData"
+nc_id <- sub(".*chrom_(NC_\\d+\\.\\d+).*", "\\1", file_name)
+
+# ------------------------------------------------------------------------------
+# Extract Variance and Sample Info
+# ------------------------------------------------------------------------------
+pc_percent <- round(pca$varprop * 100, 2)
+pc1_var <- pc_percent[1]
+pc2_var <- pc_percent[2]
+sample_ids <- pca$sample.id
+EV1 <- pca$eigenvect[, 1]
+EV2 <- pca$eigenvect[, 2]
+
+# ------------------------------------------------------------------------------
+# Plot 1: PCA by BioProject
+# ------------------------------------------------------------------------------
+bioproject_info <- pop$bioproject[match(sample_ids, pop$sample)]
+tab <- data.frame(sample.id = sample_ids, bioproject = factor(bioproject_info), EV1 = EV1, EV2 = EV2)
+
+p1 <- ggplot(tab, aes(x = EV1, y = EV2, color = bioproject)) +
+  geom_point(alpha = 0.85, size = 3) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(
+    title = nc_id,
+    subtitle = "Split by BioProject",
+    x = paste0("PC1 (", pc1_var, "%)"),
+    y = paste0("PC2 (", pc2_var, "%)"),
+    color = "BioProject"
+  ) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18),
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 13, face = "bold"),
+    legend.text = element_text(size = 11),
+    text = element_text(family = "Arial")
+  )
+print(p1)
+
+# ------------------------------------------------------------------------------
+# Plot 2: PCA by Origin (wild vs. commercial)
+# ------------------------------------------------------------------------------
+origin_grouped <- ifelse(tolower(sample_origin$origin) == "wild", "wild", "commercial")
+origin_info <- origin_grouped[match(sample_ids, sample_origin$sample)]
+tab <- data.frame(sample.id = sample_ids, origin = factor(origin_info), EV1 = EV1, EV2 = EV2)
+
+p2 <- ggplot(tab, aes(x = EV1, y = EV2, color = origin)) +
+  geom_point(alpha = 0.85, size = 3) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(
+    title = nc_id,
+    subtitle = "Split by Origin",
+    x = paste0("PC1 (", pc1_var, "%)"),
+    y = paste0("PC2 (", pc2_var, "%)"),
+    color = "Origin"
+  ) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18),
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 13, face = "bold"),
+    legend.text = element_text(size = 11),
+    text = element_text(family = "Arial")
+  )
+print(p2)
+
+# ------------------------------------------------------------------------------
+# Plot 3: PCA by Supplier (detailed origin)
+# ------------------------------------------------------------------------------
+origin_labels <- tolower(sample_origin$origin[match(sample_ids, sample_origin$sample)])
+origin_labels[origin_labels == "chinese_company"] <- "Fengdeng Biotech"
+origin_labels <- ifelse(origin_labels == "Fengdeng Biotech", origin_labels, toTitleCase(origin_labels))
+
+tab <- data.frame(sample.id = sample_ids, origin = factor(origin_labels), EV1 = EV1, EV2 = EV2)
+
+p3 <- ggplot(tab, aes(x = EV1, y = EV2, color = origin)) +
+  geom_point(alpha = 0.85, size = 3) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(
+    title = nc_id,
+    subtitle = "Split by Supplier",
+    x = paste0("PC1 (", pc1_var, "%)"),
+    y = paste0("PC2 (", pc2_var, "%)"),
+    color = "Origin"
+  ) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18),
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 13, face = "bold"),
+    legend.text = element_text(size = 11),
+    text = element_text(family = "Arial")
+  )
+print(p3)
+
+#---------------------------------------------------------------------------
+#what if i wanna loop through my files
+#-----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# Set directory and load metadata
+# ------------------------------------------------------------------------------
+pca_dir <- "C:/Users/User/Documents/Masterthesis/Results_ORG/PCA/perchromosome"
+setwd(pca_dir)
+
+# Load metadata once
+pop <- read.table("../population_information.txt", header = FALSE, stringsAsFactors = FALSE)
+colnames(pop) <- c("sample", "bioproject")
+
+sample_origin <- read.table("../sample_type_information.txt", header = FALSE, stringsAsFactors = FALSE)
+colnames(sample_origin) <- c("sample", "origin")
+
+# Grouped origin
+sample_origin$origin_grouped <- ifelse(tolower(sample_origin$origin) == "wild", "wild", "commercial")
+
+# ------------------------------------------------------------------------------
+# Loop through PCA files
+# ------------------------------------------------------------------------------
+pca_files <- list.files(pca_dir, pattern = "^pca_results_filtered_variants_pca_per_chrom_org_chrom_.*\\.RData$")
+
+for (file_name in pca_files) {
+  load(file_name)
+  
+  # Extract chromosome name from file name
+  nc_id <- sub(".*chrom_(NC_\\d+\\.\\d+).*", "\\1", file_name)
+  
+  # Extract PCA data
+  pc_percent <- round(pca$varprop * 100, 2)
+  pc1_var <- pc_percent[1]
+  pc2_var <- pc_percent[2]
+  sample_ids <- pca$sample.id
+  EV1 <- pca$eigenvect[, 1]
+  EV2 <- pca$eigenvect[, 2]
+  
+  # Match origin info
+  origin_info <- sample_origin$origin_grouped[match(sample_ids, sample_origin$sample)]
+  
+  # Prepare data for plotting
+  tab <- data.frame(sample.id = sample_ids, origin = factor(origin_info), EV1 = EV1, EV2 = EV2)
+  
+  # Plot PCA by wild vs commercial
+  p <- ggplot(tab, aes(x = EV1, y = EV2, color = origin)) +
+    geom_point(alpha = 0.85, size = 3) +
+    scale_color_brewer(palette = "Dark2") +
+    labs(
+      title = nc_id,
+      subtitle = "Split by Origin (Wild vs. Commercial)",
+      x = paste0("PC1 (", pc1_var, "%)"),
+      y = paste0("PC2 (", pc2_var, "%)"),
+      color = "Origin"
+    ) +
+    theme_classic() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 18),
+      plot.subtitle = element_text(hjust = 0.5, size = 14),
+      axis.title = element_text(size = 14),
+      axis.text = element_text(size = 12),
+      legend.title = element_text(size = 13, face = "bold"),
+      legend.text = element_text(size = 11),
+      text = element_text(family = "Arial")
+    )
+  
+  print(p)
