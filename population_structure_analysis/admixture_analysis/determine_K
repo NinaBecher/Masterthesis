@@ -1,0 +1,29 @@
+#!/bin/bash
+#SBATCH --job-name=extract_cv_errors
+#SBATCH --partition=parallel
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=64GB
+#SBATCH --time=0-00:05:00
+#SBATCH --output=extract_cv_errors_%j.out
+#SBATCH --error=extract_cv_errors_%j.err
+#SBATCH --account=m2_jgu-salmosex
+
+BASE_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/results/admixture_K20_org_strict"
+
+cd "${BASE_DIR}" || { exit 1; }
+
+echo "K_Value,CV_Error" > "${BASE_DIR}/cv_errors.csv"
+
+for K_DIR in "${BASE_DIR}"/K*; do
+    if [ -d "$K_DIR" ]; then
+        K_VALUE=$(basename "${K_DIR}" | sed 's/K//')
+        LOG_FILE="${K_DIR}/admixture_K${K_VALUE}.log"
+
+        if [ -f "$LOG_FILE" ]; then
+            CV_ERROR=$(grep "CV error" "$LOG_FILE" | awk '{print $4}')
+            echo "${K_VALUE},${CV_ERROR}" >> "${BASE_DIR}/cv_errors.csv"
+        fi
+    fi
+done
