@@ -1,0 +1,96 @@
+process genomic overlap files (specifically, .bed files that represent overlaps between genomic windows and gene annotations
+
+
+#!/bin/bash
+#SBATCH --job-name=window_gene_overlap_all
+#SBATCH --partition=parallel
+#SBATCH -C skylake
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=0-30:00:00
+#SBATCH --mem=32GB
+#SBATCH --cpus-per-task=4
+#SBATCH --output=window_gene_overlap_all_%j.out
+#SBATCH --error=window_gene_overlap_all_%j.err
+
+declare -A FILES
+FILES[Bter1.0]="Bter1.0_windows_gene_overlap.bed"
+FILES[BomTer1.2]="iyBomTerr1.2_windows_gene_overlap.bed"
+
+for prefix in "${!FILES[@]}"; do
+  INPUT="${FILES[$prefix]}"
+
+  echo "Processing $INPUT ..."
+
+  # 1. Count unique genes per window
+  awk '
+  {
+    window = $1":"$2"-"$3;
+    match($7, /ID=([^;]+)/, arr);
+    geneID = arr[1];
+    window_gene[window SUBSEP geneID] = 1;
+    windows[window] = 1;
+  }
+  END {
+    for (w in windows) {
+      count = 0;
+      for (key in window_gene) {
+        split(key, arr, SUBSEP);
+        if (arr[1] == w) count++;
+      }
+      print w, count;
+    }
+  }' "$INPUT" > "${prefix}_window_gene_counts.txt"
+
+
+  # 2. Extract gene IDs per window
+  awk '
+  {
+    window = $1":"$2"-"$3;
+    match($7, /ID=([^;]+)/, arr);
+    geneID = arr[1];
+    key = window SUBSEP geneID;
+    if (!(key in seen)) {
+      if (gene_list[window] != "") {
+        gene_list[window] = gene_list[window] "," geneID;
+      } else {
+        gene_list[window] = geneID;
+      }
+      windows[window] = 1;
+      seen[key] = 1;
+    }
+  }
+  END {
+    for (w in windows) {
+      print w "\t" gene_list[w];
+    }
+  }' "$INPUT" > "${prefix}_window_gene_ids.txt"
+
+
+  # 3. Create window x gene presence/absence matrix
+  awk '
+  {
+    window = $1":"$2"-"$3;
+    match($7, /ID=([^;]+)/, arr);
+    geneID = arr[1];
+    matrix[window SUBSEP geneID] = 1;
+    windows[window] = 1;
+    genes[geneID] = 1;
+  }
+  END {
+    # print header
+    printf "Window";
+    for (g in genes) printf "\t%s", g;
+    print "";
+
+    for (w in windows) {
+      printf w;
+      for (g in genes) {
+        printf "\t%d", ((w SUBSEP g) in matrix ? 1 : 0);
+      }
+      print "";
+    }
+  }' "$INPUT" > "${prefix}_window_gene_matrix.tsv"
+
+  echo "Finished $prefix."
+done
+
