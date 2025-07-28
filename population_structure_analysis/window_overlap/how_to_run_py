@@ -1,0 +1,15 @@
+#!/bin/bash
+#SBATCH --job-name=python_gene_extract
+#SBATCH --partition=parallel
+#SBATCH -C skylake
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=0-30:00:00
+#SBATCH --mem=32GB
+#SBATCH --cpus-per-task=4
+#SBATCH --output=python_gene_extract_%j.out
+#SBATCH --error=python_gene_extract_%j.err
+
+module load bio/Modeller/9.25-GCCcore-9.3.0-Python-3.8.2
+PYTHON_SCRIPT="/lustre/miifs01/project/m2_jgu-salmosex/nina/results_updated/window_overlap/extract_genes.py"
+python "$PYTHON_SCRIPT"
+
