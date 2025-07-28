@@ -1,0 +1,36 @@
+# Description: This script extracts mRNA sequences from a genome FASTA file
+#based on gene annotations provided in a GFF file.
+
+
+#!/bin/bash
+#SBATCH --job-name=extract_mrna_seq
+#SBATCH --partition=parallel
+#SBATCH -C skylake
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=0-01:00:00 
+#SBATCH --mem=8GB        
+#SBATCH --cpus-per-task=1 
+#SBATCH --output=extract_mrna_seq_%j.out
+#SBATCH --error=extract_mrna_seq_%j.err
+
+
+GENOME_FASTA="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/reference_genomes/GCF_000214255.1_Bter_1.0_genomic.fna"
+MATCHED_GFF="/lustre/miifs01/project/m2_jgu-salmosex/nina/results_updated/window_overlap/matched_genes.gff"
+OUTPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/results_updated/window_overlap/"
+OUTPUT_FASTA="${OUTPUT_DIR}matched_genes_mrna.fasta"
+
+mkdir -p "${OUTPUT_DIR}"
+
+module load bio/BEDTools/2.29.2-iccifort-2020.1.217
+
+
+# extracting the  mRNA-Sequenzen 
+echo "Starte Sequenzextraktion für mRNA-Gene..."
+awk '$3 == "mRNA"' "${MATCHED_GFF}" | \
+bedtools getfasta \
+-fi "${GENOME_FASTA}" \
+-bed - \
+-fo "${OUTPUT_FASTA}" \
+-name+ \
+-s
+
