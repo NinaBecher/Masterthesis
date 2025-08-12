@@ -1,0 +1,44 @@
+################################################################################################################################################################################################################################################
+# Script: generate_genotype_matrix.sh
+# Purpose: Extract genotype matrix from a VCF file and convert genotypes to
+#          numeric format (0, 0.5, 1, NA) # Path to your VCF 
+################################################################################################################################################################################################################################################
+VCF="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/all_bioprojects_snps_filtered_Bter1_0.vcf.gz"
+
+# Output file
+OUT="genotype_matrix_normalized.txt"
+
+# Create header with CHROM POS and sample names
+bcftools query -l "$VCF" | awk 'BEGIN{printf "CHROM\tPOS"} {printf "\t%s",$1} END{print ""}' > "$OUT"
+
+# Append genotype matrix (0, 0.5, 1, NA)
+bcftools query -f '%CHROM\t%POS[\t%GT]\n' "$VCF" | \
+awk 'BEGIN{OFS="\t"}
+{
+  printf "%s\t%s", $1, $2;
+  for(i=3; i<=NF; i++){
+    g=$i;
+    if(g=="./." || g=="." ) { val="NA"; }
+    else if(g=="0/0" || g=="0|0") { val="0.0"; }
+    else if(g=="1/1" || g=="1|1") { val="1.0"; }
+    else if(g=="0/1" || g=="1/0" || g=="0|1" || g=="1|0") { val="0.5"; }
+    else if(g=="0") { val="0.0"; }
+    else if(g=="1") { val="1.0"; }
+    else {
+      split(g, a, /[\/|]/);
+      sum=0; cnt=0;
+      bad=0;
+      for(j in a){
+        if(a[j]=="."){ bad=1; break }
+        sum+=a[j]; cnt++
+      }
+      if(bad==1){ val="NA" } else {
+        val = sum/cnt;
+        if(val>1) val=val/2;
+        val = sprintf("%.3f", val);
+      }
+    }
+    printf "\t%s", val;
+  }
+  print "";
+}' >> "$OUT"
