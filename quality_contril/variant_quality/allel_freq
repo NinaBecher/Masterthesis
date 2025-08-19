@@ -1,0 +1,26 @@
+#-----------------------------------
+#This script calculates the allele frequencies for each biallelic (maximum two alleles) variant in your VCF file. It basically tells you how common each allele is across all your samples.
+#-----------------------------------
+
+#!/bin/bash
+#SBATCH --job-name=vcftools_missing
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=1-00:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH -o depth.out
+#SBATCH -e depth.err
+
+# Load the required module
+module load bio/VCFtools/0.1.16-GCC-11.2.0
+
+# Change to the working directory
+cd /lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/vca/
+
+# Define my input VCF and output file
+SUBSET_VCF="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/filtered_variants.vcf.gz"
+OUT="filtered_variants_freq"
+
+# Run vcf command to see what my allele frequency is
+vcftools --gzvcf "$SUBSET_VCF" --freq2 --out "$OUT" --max-alleles 2
