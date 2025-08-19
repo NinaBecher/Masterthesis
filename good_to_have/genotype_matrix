@@ -1,0 +1,50 @@
+#!/bin/bash
+#SBATCH -C skylake
+#SBATCH --job-name=genotype_matrix
+#SBATCH --partition=parallel
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=1-00:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH -o genotype_matrix.out
+#SBATCH -e genotype_matrix.err
+
+# Load the required module
+module load bio/BCFtools/1.14-GCC-11.2.0
+
+# Define input and output files
+VCF_FILE="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/all_bioprojects_snps_strict_filtered_Bter1_0.vcf.gz"
+OUTPUT_FILE="all_bioprojects_snps_strict_filtered_Bter1_0_genotype_matrix_normalized.txt"
+
+# Extract header, genotypes, and format them
+bcftools query -f '[%CHROM\t%POS[\t%GT]\n]' "$VCF_FILE" | \
+awk '
+BEGIN {
+    OFS="\t";
+    print "CHROM", "POS", "SRR23684826", "SRR23684825", "SRR23684824", "SRR23649188", "SRR23681994", "SRR23684823", "SRR23651151", "SRR23649185", "SRR23651150", "SRR23649187", "SRR23651152", "SRR23675066", "SRR23681997", "SRR23651149", "SRR23647780", "SRR23651148", "SRR23649184", "SRR23649183", "SRR23675070", "SRR23675065", "SRR23651153", "SRR23675067", "SRR23675068", "SRR23681993", "SRR23675069", "SRR23649186", "SRR23675071", "SRR23681995", "SRR23675072", "SRR23681996", "SRR23684821", "SRR23684822", "ERR6055009", "ERR6055008", "ERR6055007", "ERR6055006", "SRR14066194", "SRR14066185", "SRR14066186", "SRR14066189", "SRR14066196", "SRR14066184", "SRR14066187", "SRR14066192", "SRR14066191", "SRR14066188", "SRR14066197", "SRR14066190", "SRR14066193", "SRR14066195", "SRR12180931", "SRR12171313", "SRR12174541", "SRR12171173", "SRR12170781", "SRR12168699", "SRR12168508", "SRR12170585", "SRR12165042", "SRR12169215", "SRR12161711", "SRR11885031", "SRR11883556", "SRR11880654", "SRR11879878", "SRR18329090", "SRR12170707", "SRR11654235", "SRR11668399", "SRR11862157", "SRR11665914", "SRR11647856", "SRR11649676", "SRR11625411", "SRR11780128", "SRR11711132", "SRR11640395", "SRR11871334", "SRR11745230", "SRR12179650", "SRR11746805", "SRR11637993", "SRR12173003", "SRR11780662", "SRR11659726", "SRR11742810", "SRR11658994", "SRR11775825", "SRR11744605", "SRR11729941", "SRR11744704", "SRR11722087", "SRR11745184", "SRR11747770", "SRR11777740", "SRR11773638", "SRR11780512", "SRR11802589", "SRR11881496", "SRR11861506", "SRR11803984", "SRR10055230", "SRR10055223", "SRR10055207", "SRR10055196", "SRR10055184", "SRR10055173", "SRR10055180", "SRR10055157", "SRR10055147", "SRR3693403", "SRR3693401", "SRR3693402", "SRR3693015", "SRR3693052", "SRR3693011", "SRR3693000", "SRR3692998", "SRR3692997", "SRR3693014", "SRR3692994", "SRR3692996", "SRR3693010", "SRR3693381", "SRR3693012", "SRR3693009", "SRR3693372", "SRR3692989", "SRR3692915", "SRR3693016", "SRR3693020", "SRR3693017", "SRR3693019", "SRR3693374", "SRR3693021", "SRR3693022", "SRR3693108", "SRR3693141", "SRR3693382", "SRR3693384", "SRR3693387", "SRR3693386", "MU_58", "MU_57", "MU_56", "MU_55", "MU_54", "MU_53", "MU_48", "ERR7799974", "ERR7800025", "ERR7800035", "ERR7800021", "ERR7800022", "ERR7799985", "ERR7800031", "ERR7800027", "ERR7800034", "ERR7800045", "ERR7800026", "ERR7800033", "ERR7800036", "ERR7799987", "ERR7800028", "ERR7799969", "ERR7799989", "ERR7800030", "ERR7799981", "ERR7800048", "ERR7800051", "ERR7800023", "ERR7800029", "ERR7800032", "ERR7800043", "ERR7800024", "ERR7800019", "SRR3928794", "SRR3928790", "SRR3928789", "SRR3928787", "SRR3928782", "SRR3928765", "SRR3928722"
+}
+{
+    printf "%s\t%s", $1, $2
+    for (i = 3; i <= NF; i++) {
+        split($i, gt_alleles, /[/|]/)
+        # Check for missing data
+        if ($i == "./." || $i == ".") {
+            printf "\tNA"
+        } 
+        # Normalize diploid genotypes
+        else if (gt_alleles[1] != "" && gt_alleles[2] != "") {
+            sum = gt_alleles[1] + gt_alleles[2]
+            normalized = sum / 2.0
+            printf "\t%.1f", normalized
+        }
+        # Normalize haploid genotypes
+        else {
+            normalized = gt_alleles[1]
+            printf "\t%.1f", normalized
+        }
+    }
+    printf "\n"
+}
+' > "$OUTPUT_FILE"
+
+echo "Genotype matrix regeneration complete. Output saved to $OUTPUT_FILE"
