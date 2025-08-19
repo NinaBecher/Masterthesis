@@ -1,0 +1,21 @@
+#-----------------------------------------------------------------------------
+It’s a script to check and save the quality scores of all the variants in a VCF file.
+#-----------------------------------------------------------------------------
+#!/bin/bash
+#SBATCH --job-name=vcftools_missing
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=1-00:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH -o qc.out
+#SBATCH -e qc.err
+
+# Load the required module
+module load bio/VCFtools/0.1.16-GCC-11.2.0
+
+# Change to the working directory
+cd /lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/vca/
+
+# Run VCFtools with --site-quality
+vcftools --gzvcf /lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/filtered_variants.vcf.gz --site-quality --out filtered_variants_site_quality
