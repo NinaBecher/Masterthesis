@@ -1,0 +1,22 @@
+#!/bin/bash
+
+#SBATCH --job-name=snp_positions
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=0-01:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH -o snp_positions.out
+#SBATCH -e snp_positions.err
+
+# Load the required module
+module load bio/BCFtools/1.14-GCC-11.2.0
+
+# Define input and output files
+VCF_FILE="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/all_bioprojects_snps_strict_filtered_Bter1_0.vcf.gz"
+OUTPUT_FILE="all_bioprojects_snps_strict_filtered_Bter1_0_snp_positions.txt"
+
+# Extract chromosome and position and save to file
+bcftools query -f '[%CHROM\t%POS\n]' "$VCF_FILE" > "$OUTPUT_FILE"
+
+echo "SNP positions extracted successfully. Output saved to $OUTPUT_FILE"
