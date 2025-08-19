@@ -1,0 +1,28 @@
+
+#----------------------------------------------------
+#This script calculates sequencing depth information from your VCF file in two ways:
+#--depth computes the average depth (number of reads covering each variant) for each individual sample.
+#--site-mean-depth computes the average depth for each variant site across all samples.
+#---------------------------------------------------- 
+
+#!/bin/bash
+#SBATCH --job-name=vcftools_depth
+#SBATCH --partition=smp
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --time=1-00:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH -o depth.out
+#SBATCH -e depth.err
+
+# Load the required module
+module load bio/VCFtools/0.1.16-GCC-11.2.0
+
+# Change to the working directory
+cd /lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/vca/
+
+# Run VCFtools for individual depth stats
+vcftools --gzvcf /lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/filtered_variants.vcf.gz --depth --out filtered_variants_depth
+
+# Run VCFtools for site-specific mean depth stats
+vcftools --gzvcf /lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/filtered_variants.vcf.gz --site-mean-depth --out filtered_variants_site_mean_depth
