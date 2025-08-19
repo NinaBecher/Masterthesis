@@ -1,0 +1,44 @@
+#!/bin/bash
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH -C skylake
+#SBATCH --job-name=rename_chromosomes
+#SBATCH --output=rename_chromosomes_%j.out
+#SBATCH --error=rename_chromosomes_%j.err
+#SBATCH --time=0-01:00:00
+#SBATCH --mem=16G 
+#SBATCH --partition=parallel
+module load module load bio/BCFtools/1.14-GCC-11.2.0
+# --- Variables ---
+INPUT_VCF="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/all_bioprojects_snps_strict_filtered_Bter1_0.vcf.gz"
+OUTPUT_VCF_BASE="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/all_bioprojects_snps_strict_filtered_Bter1_0_chromosomes_renamed"
+OUTPUT_VCF="${OUTPUT_VCF_BASE}.vcf"
+OUTPUT_VCF_GZ="${OUTPUT_VCF_BASE}.vcf.gz"
+
+# --- Unzip the VCF ---
+gunzip -c "$INPUT_VCF" > "$OUTPUT_VCF"
+
+# --- Rename chromosomes ---
+sed -i 's/NC_015762.1/B01/g' "$OUTPUT_VCF"
+sed -i 's/NC_015763.1/B02/g' "$OUTPUT_VCF"
+sed -i 's/NC_015764.1/B03/g' "$OUTPUT_VCF"
+sed -i 's/NC_015765.1/B04/g' "$OUTPUT_VCF"
+sed -i 's/NC_015766.1/B05/g' "$OUTPUT_VCF"
+sed -i 's/NC_015767.1/B06/g' "$OUTPUT_VCF"
+sed -i 's/NC_015768.1/B07/g' "$OUTPUT_VCF"
+sed -i 's/NC_015769.1/B08/g' "$OUTPUT_VCF"
+sed -i 's/NC_015770.1/B09/g' "$OUTPUT_VCF"
+sed -i 's/NC_015771.1/B10/g' "$OUTPUT_VCF"
+sed -i 's/NC_015772.1/B11/g' "$OUTPUT_VCF"
+sed -i 's/NC_015773.1/B12/g' "$OUTPUT_VCF"
+sed -i 's/NC_015774.1/B13/g' "$OUTPUT_VCF"
+sed -i 's/NC_015775.1/B14/g' "$OUTPUT_VCF"
+sed -i 's/NC_015776.1/B15/g' "$OUTPUT_VCF"
+sed -i 's/NC_015777.1/B16/g' "$OUTPUT_VCF"
+sed -i 's/NC_015778.1/B17/g' "$OUTPUT_VCF"
+sed -i 's/NC_015779.1/B18/g' "$OUTPUT_VCF"
+
+# --- Recompress and index ---
+gzip -f "$OUTPUT_VCF"
+bcftools index --csi "$OUTPUT_VCF_GZ"
+
+echo "Chromosome renaming complete. Output saved to $OUTPUT_VCF_GZ"
