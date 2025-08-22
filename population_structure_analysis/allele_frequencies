@@ -1,0 +1,73 @@
+#!/bin/bash
+#SBATCH --job-name=allele_freq_chr10_by_supplier
+#SBATCH --output=/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/allele_freq_chr10_by_supplier_%j.out
+#SBATCH --error=/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/allele_freq_chr10_by_supplier_%j.err
+#SBATCH --partition=parallel
+#SBATCH -C skylake
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH --mem=32GB
+#SBATCH --time=02:00:00
+
+module load bio/BCFtools/1.14-GCC-11.2.0
+
+# Input files
+VCF=/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_nrg/variantcalling/filtered_variants/vcf_strict/all_bioprojects_snps_strict_filtered_BomTerr1_2.vcf.gz
+POPFILE=/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/pop.txt
+
+# Output directory + files
+OUTDIR=/lustre/miifs01/project/m2_jgu-salmosex/nina/Population_genomics_results/allel_frequencies/BomTerr1_2
+mkdir -p $OUTDIR
+OUT_WILD_COMM=$OUTDIR/allele_freq_NC_063278.1_wild_commercial_BomTerr1_2.txt
+
+# Extract sample names from VCF
+bcftools query -l $VCF > /tmp/samples.txt
+
+# Calculate allele frequencies for NC_063278.1 by supplier
+bcftools view -r NC_063278.1 $VCF \
+  | bcftools query -f '%CHROM\t%POS[\t%GT]\n' \
+  | awk -v popfile=$POPFILE -v samplefile=/tmp/samples.txt '
+    BEGIN {
+      # Read supplier assignment (sample -> supplier)
+      while ((getline < popfile) > 0) {
+        pop[$1]=$2
+      }
+      # Read sample order from VCF
+      idx=0
+      while ((getline < samplefile) > 0) {
+        idx++
+        sample[idx]=$0
+      }
+    }
+    {
+      split("", count_ref)
+      split("", count_alt)
+      for(i=3;i<=NF;i++){
+        s=$i
+        samp=sample[i-2]
+        p=pop[samp]
+        if(p=="") p="unknown"
+        if(!(p in count_ref)) count_ref[p]=0
+        if(!(p in count_alt)) count_alt[p]=0
+
+        # Genotype parsing
+        if(s=="0" || s=="0/0" || s=="0|0") {
+          count_ref[p]+=2
+        }
+        else if(s=="1" || s=="1/1" || s=="1|1") {
+          count_alt[p]+=2
+        }
+        else if(s=="0/1" || s=="1/0" || s=="0|1" || s=="1|0") {
+          count_ref[p]++
+          count_alt[p]++
+        }
+      }
+      for(p in count_ref){
+        print $1, $2, count_ref[p], count_alt[p], p
+      }
+    }' OFS='\t' > $OUT_WILD_COMM
+
+# Cleanup temporary file
+rm -f /tmp/samples.txt
+
+echo "Allele frequencies for NC_063278.1 by supplier saved to $OUT_WILD_COMM"
+
