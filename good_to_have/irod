@@ -1,0 +1,36 @@
+#!/bin/bash
+
+#SBATCH --account=m2_jgu-salmosex
+#SBATCH -C skylake
+#SBATCH --job-name=tar_only
+#SBATCH --output=r_%j.out
+#SBATCH --error=r_%j.err
+#SBATCH --time=0-20:00:00
+#SBATCH --mem=16G
+#SBATCH --partition=parallel
+
+# path to the folder I want to compress
+LOCAL_DIR_PATH="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_nrg/variantcalling/"
+
+# name for the tarball (adds today’s date automatically)
+TARBALL_NAME="AllBioProjects_BomTerr1_2_$(date +%Y-%m-%d).tar.gz"
+
+echo "starting tarball creation at $(date)"
+echo "------------------------------------"
+
+# go into the folder with my data
+cd "${LOCAL_DIR_PATH}" || { echo "couldn’t cd into ${LOCAL_DIR_PATH}, stopping"; exit 1; }
+
+# actually make the tarball (compress everything in this folder)
+echo "making tarball: ${TARBALL_NAME}"
+tar -czvf "${TARBALL_NAME}" .
+if [ $? -ne 0 ]; then
+    echo "something went wrong with tar, stopping"
+    exit 1
+fi
+
+echo "tarball done: $(pwd)/${TARBALL_NAME}"
+
+echo "------------------------------------"
+echo "finished at $(date)"
+
