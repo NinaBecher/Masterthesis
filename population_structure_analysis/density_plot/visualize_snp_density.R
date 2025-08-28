@@ -1,80 +1,73 @@
 ############################################################
-# SNP Density Plot
-# Author: Nina
-# Description: Calculates SNP density across the genome 
-#              and visualizes it with a threshold line.
-############################################################
+# SNP Density Plot for Wild Population (Bter1.0)
+# Computes SNP density per 10 kb and plots rolling average
+# Author: Nina Becher
+#############################################################
 
-# -------------------
-# Load required libraries
-# -------------------
+# --- Load libraries ---
 library(ggplot2)
 library(dplyr)
+library(data.table)
+library(zoo)
 
-# -------------------
-# Set working directory
-# -------------------
-setwd("C:/Users/User/Documents/Masterthesis/results_bomterr/results_org/density_plot")
+# --- Set working directory ---
+setwd("C:/Users/User/Documents/Masterthesis/Population_genomics")
 
-# -------------------
-# Load SNP position data
-# -------------------
-# Expected format: two columns [CHROM, POS]
-snp_data <- read.table(
-  "snp_positions.txt",
-  header = FALSE,
-  col.names = c("CHROM", "POS")
-)
+# --- Read Wild SNP positions ---
+wild <- fread("wild_snp_positions.txt", col.names = c("chrom", "pos"))
 
-# -------------------
-# Parameters
-# -------------------
-window_size <- 10000  # Window size in base pairs (e.g., 10 kb)
+# --- Bin SNPs into 10 kb windows ---
+window <- 10000
+wild <- wild %>% mutate(bin = floor(pos / window) * window)
 
-# -------------------
-# Calculate SNP density per window for each chromosome
-# -------------------
-snp_density <- snp_data %>%
-  group_by(CHROM) %>%
-  mutate(window = floor(POS / window_size)) %>%
-  group_by(CHROM, window) %>%
-  summarise(SNPs = n(), .groups = "drop") %>%
-  mutate(
-    start = window * window_size,
-    end = start + window_size
-  )
+# --- Count SNPs per bin ---
+density <- wild %>%
+  group_by(chrom, bin) %>%
+  summarise(count = n(), .groups = "drop")
 
-# -------------------
-# Create cumulative positions for continuous x-axis
-# -------------------
-chr_lengths <- snp_density %>%
-  group_by(CHROM) %>%
-  summarise(chr_len = max(end))
+# --- Compute cumulative positions for genome-wide plotting ---
+chrom_lengths <- density %>%
+  group_by(chrom) %>%
+  summarise(max_pos = max(bin), .groups = "drop") %>%
+  arrange(chrom) %>%
+  mutate(cum_start = lag(cumsum(max_pos), default = 0))
 
-chr_offsets <- c(0, cumsum(head(chr_lengths$chr_len, -1)))
-names(chr_offsets) <- chr_lengths$CHROM
+density <- density %>%
+  left_join(chrom_lengths %>% select(chrom, cum_start), by = "chrom") %>%
+  mutate(cum_pos = bin + cum_start)
 
-snp_density <- snp_density %>%
-  mutate(pos_cum = start + chr_offsets[CHROM])
+# --- Compute rolling average (500 bins ~5 Mb) ---
+density <- density %>%
+  arrange(cum_pos) %>%
+  mutate(roll_avg = rollmean(count, k = 500, fill = NA, align = "center"))
 
-# -------------------
-# Plot SNP density
-# -------------------
-ggplot(snp_density, aes(x = pos_cum, y = SNPs)) +
-  geom_point(size = 0.8) +
+# --- Compute chromosome midpoints for x-axis labels ---
+chrom_midpoints <- density %>%
+  group_by(chrom) %>%
+  summarise(mid = (min(cum_pos) + max(cum_pos)) / 2, .groups = "drop")
+
+# --- Plot SNP density ---
+# --- Plot SNP density with rotated chromosome labels ---
+ggplot(density, aes(x = cum_pos, y = count)) +
+  geom_point(color = "#66a61e", alpha = 0.6, size = 1.5) +      
+  geom_line(aes(y = roll_avg), color = "#d95f02", size = 1) +  
+  geom_hline(yintercept = top1_threshold, color = "red", linetype = "dashed") + 
+  scale_x_continuous(
+    breaks = chrom_midpoints$mid,
+    labels = chrom_midpoints$chrom
+  ) +
   theme_bw() +
   labs(
-    title = "SNP Density Across the Genome",
-    subtitle = "Reference Genome: Bter1.0",
-    x = "Genomic position (bp)",
-    y = paste("Number of SNPs (", window_size / 1000, " kb windows)", sep = "")
-  ) +
-  geom_hline(
-    yintercept = mean(snp_density$SNPs) + 3 * sd(snp_density$SNPs),
-    color = "red",
-    linetype = "dashed"
+    x = "Chromosome",
+    y = "Number of SNPs per 10 kb",
+    title = "Reference Genome Bter1.0"
   ) +
   theme(
-    plot.title = element_text(face = "bold", hjust = 0.5),   # Bold & centered title
-    plot.subtitle = element_text(face = "italic", hjust = 0.5) # Italic & centered subtitle
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  
+    axis.text.y = element_text(size = 12),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
   )
+
