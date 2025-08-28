@@ -1,0 +1,137 @@
+# ============================================================
+# Genome-wide and Chromosome-specific Allele Frequency Plots
+# Author: Nina Becher
+# ============================================================
+
+# --- Load libraries ---
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+# --- Set working directory ---
+setwd("C:/Users/User/Documents/Masterthesis/Population_genomics/Bter1_0/Snp_density_and_allel_freq")
+
+# ============================================================
+# 1. Genome-wide allele frequencies (Wild vs Commercial)
+# ============================================================
+
+# Read allele frequency data
+allele_file <- "allele_freq_wild_commercial_Bter1_0.txt"
+allele_freq <- fread(allele_file, col.names = c("chrom","pos","ref","alt","pop")) %>%
+  mutate(
+    freq = alt / (ref + alt),
+    pop = ifelse(tolower(pop) == "wild", "Wild", "Commercial")
+  )
+
+# Compute genome-wide cumulative positions
+chrom_lengths <- allele_freq %>%
+  group_by(chrom) %>%
+  summarise(max_pos = max(pos, na.rm = TRUE)) %>%
+  arrange(chrom) %>%
+  mutate(cum_start = lag(cumsum(max_pos), default = 0))
+
+allele_freq <- allele_freq %>%
+  left_join(chrom_lengths %>% select(chrom, cum_start), by = "chrom") %>%
+  mutate(cum_pos = pos + cum_start) %>%
+  filter(!is.na(cum_pos))
+
+# Chromosome midpoints for x-axis labeling
+chrom_midpoints <- allele_freq %>%
+  group_by(chrom) %>%
+  summarise(mid = (min(cum_pos) + max(cum_pos)) / 2)
+
+# Plot genome-wide allele frequencies
+ggplot(allele_freq, aes(x = cum_pos, y = freq, color = pop, fill = pop)) +
+  geom_smooth(se = TRUE, span = 0.05, size = 1.2, alpha = 0.2) +
+  scale_color_manual(values = c("Commercial" = "#66a61e", "Wild" = "#d95f02")) +
+  scale_fill_manual(values = c("Commercial" = "#66a61e", "Wild" = "#d95f02")) +
+  scale_x_continuous(breaks = chrom_midpoints$mid, labels = chrom_midpoints$chrom) +
+  labs(
+    title = "Genome-wide Allele Frequencies: Wild vs Commercial",
+    x = "Chromosome",
+    y = "Allele Frequency",
+    color = "Populations",
+    fill = "Populations"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = c(0.05, 0.95),
+    legend.justification = c("left", "top"),
+    legend.background = element_rect(fill = alpha("white", 0.6)),
+    legend.title = element_text(face = "bold")
+  )
+
+# ============================================================
+# 2. Allele frequencies for chromosome NC_015772.1
+# ============================================================
+
+allele_freq_chr <- allele_freq %>% filter(chrom == "NC_015772.1")
+
+ggplot(allele_freq_chr, aes(x = pos, y = freq, color = pop, fill = pop)) +
+  geom_smooth(se = TRUE, span = 0.05, size = 1.2, alpha = 0.2) +
+  scale_color_manual(values = c("Commercial" = "#66a61e", "Wild" = "#d95f02")) +
+  scale_fill_manual(values = c("Commercial" = "#66a61e", "Wild" = "#d95f02")) +
+  labs(
+    title = "Allele Frequencies on Chromosome NC_015772.1",
+    x = "Position",
+    y = "Allele Frequency",
+    color = "Populations",
+    fill = "Populations"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    legend.position = c(0.05, 0.95),
+    legend.justification = c("left", "top"),
+    legend.background = element_rect(fill = alpha("white", 0.6)),
+    legend.title = element_text(face = "bold")
+  )
+
+# ============================================================
+# 3. Allele frequencies per supplier for chromosome NC_015772.1
+# ============================================================
+
+supplier_file <- "allele_freq_NC_015772.1_by_supplier_Bter1_0.txt"
+allele_supplier <- fread(supplier_file, col.names = c("chrom","pos","ref","alt","supplier")) %>%
+  mutate(
+    freq = alt / (ref + alt),
+    pop_supplier = ifelse(tolower(supplier) == "wild", "Wild", supplier)
+  )
+
+# Replace "chinese_company" with full name
+allele_supplier <- allele_supplier %>%
+  mutate(pop_supplier = ifelse(pop_supplier == "chinese_company",
+                               "Shandong Fengdeng Biotechnology",
+                               pop_supplier))
+
+# Filter for chromosome NC_015772.1
+allele_supplier <- allele_supplier %>% filter(chrom == "NC_015772.1")
+
+# Dynamic color palette for all suppliers
+all_pops <- unique(allele_supplier$pop_supplier)
+palette_colors <- scales::hue_pal()(length(all_pops))
+color_mapping <- setNames(palette_colors, all_pops)
+
+# Plot smoothed allele frequencies per supplier
+ggplot(allele_supplier, aes(x = pos, y = freq, color = pop_supplier, fill = pop_supplier)) +
+  geom_smooth(se = TRUE, span = 0.05, size = 1.2, alpha = 0.2) +
+  labs(
+    title = "Allele Frequencies on Chromosome NC_015772.1 by Supplier",
+    x = "Position",
+    y = "Allele Frequency",
+    color = "Populations / Supplier",
+    fill = "Populations / Supplier"
+  ) +
+  scale_color_manual(values = color_mapping) +
+  scale_fill_manual(values = color_mapping) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    legend.position = c(0.05, 0.95),
+    legend.justification = c("left", "top"),
+    legend.background = element_rect(fill = alpha("white", 0.6)),
+    legend.title = element_text(face = "bold")
+  )
