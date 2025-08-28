@@ -135,3 +135,72 @@ ggplot(allele_supplier, aes(x = pos, y = freq, color = pop_supplier, fill = pop_
     legend.background = element_rect(fill = alpha("white", 0.6)),
     legend.title = element_text(face = "bold")
   )
+
+
+
+
+
+
+# --- Load libraries ---
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+# --- 1. Read allele frequency data (Wild vs Commercial) ---
+allele_file <- "allele_freq_wild_commercial_Bter1_0.txt"
+allele_freq <- fread(allele_file, col.names = c("chrom","pos","ref","alt","pop")) %>%
+  mutate(pop = ifelse(tolower(pop) == "wild", "Wild", "Commercial"))
+
+# --- Filter for chromosome NC_015772.1 ---
+allele_freq_chr <- allele_freq %>% filter(chrom == "NC_015772.1") %>%
+  mutate(total = ref + alt)
+
+# --- Fit binomial GLM: Wild vs Commercial ---
+glm_model <- glm(cbind(alt, ref) ~ pop, family = binomial, data = allele_freq_chr)
+summary(glm_model)
+
+# --- 2. Read allele frequency data by supplier ---
+supplier_file <- "allele_freq_NC_015772.1_by_supplier_Bter1_0.txt"
+allele_supplier <- fread(supplier_file, col.names = c("chrom","pos","ref","alt","supplier")) %>%
+  mutate(
+    supplier = ifelse(supplier == "chinese_company",
+                      "Shandong Fengdeng Biotechnology",
+                      supplier)
+  )
+unique(allele_supplier$supplier) 
+# --- Filter for chromosome NC_015772.1 ---
+allele_supplier_chr <- allele_supplier %>% filter(chrom == "NC_015772.1") %>%
+  mutate(total = ref + alt)
+
+# --- Set reference level for GLM ---
+allele_supplier_chr$supplier <- factor(
+  allele_supplier_chr$supplier,
+  levels = c("wild", "biobest", "koppert", "Shandong Fengdeng Biotechnology", "BioBee")
+)
+
+# --- Fit binomial GLM with supplier as predictor ---
+glm_model_supplier <- glm(cbind(alt, ref) ~ supplier, family = binomial, data = allele_supplier_chr)
+summary(glm_model_supplier)
+
+# --- 3. GLM per SNP for supplier-specific significance ---
+glm_per_snp <- function(df){
+  if(length(unique(df$supplier)) < 2 || all(df$ref + df$alt == 0)) return(data.frame())
+  tryCatch({
+    model <- glm(cbind(alt, ref) ~ supplier, family = binomial, data = df)
+    pvals <- summary(model)$coefficients[-1, "Pr(>|z|)"]
+    if(length(pvals) == 0) return(data.frame())
+    data.frame(pos = df$pos[1], supplier = names(pvals), p_value = pvals)
+  }, error = function(e){data.frame()})
+}
+
+glm_results <- allele_supplier_chr %>%
+  group_by(pos) %>%
+  do(glm_per_snp(.)) %>%
+  ungroup() %>%
+  mutate(
+    p_adj = p.adjust(p_value, method = "fdr"),
+    neglog10p = -log10(p_adj)
+  )
+
+
