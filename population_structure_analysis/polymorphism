@@ -1,0 +1,106 @@
+# Polymorphic site visualization
+# Author:Nina Becher 
+
+# Description:
+#   This script visualizes polymorphic sites from pixy output.
+#   It produces:
+#     1) Boxplot with jitter points per chromosome, highlighting top 1%.
+#     2) Top 1% polymorphic windows plotted across a selected chromosome.
+#     3) Performs ANOVA + Tukey posthoc test.
+
+# -------------------------------
+# Load packages
+# -------------------------------
+library(tidyverse)
+
+# -------------------------------
+# Input data
+# -------------------------------
+setwd("C:/Users/User/Documents/Masterthesis/Population_genomics/BomTerr1_2/polymorphic")
+
+pixy_file <- "pixy_pi.txt"
+pixy_data <- read.table(pixy_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+# -------------------------------
+# Data preparation
+# -------------------------------
+# Remove rows with missing values
+pixy_clean <- pixy_data %>% filter(!is.na(count_diffs))
+
+# Compute top 1% threshold across all chromosomes
+threshold <- quantile(pixy_clean$count_diffs, 0.99, na.rm = TRUE)
+
+# Add a column to mark top 1% windows
+pixy_clean <- pixy_clean %>%
+  mutate(top1 = ifelse(count_diffs >= threshold, "Top 1%", "Other"))
+
+# Make chromosome a factor to control order
+pixy_clean$chromosome <- factor(pixy_clean$chromosome, levels = unique(pixy_clean$chromosome))
+
+# -------------------------------
+# Plot: Polymorphic windows per chromosome
+# -------------------------------
+ggplot(pixy_clean, aes(x = chromosome, y = count_diffs, color = top1)) +
+  geom_point(position = position_jitter(width = 0.2), size = 1.5, alpha = 0.4) +
+  geom_boxplot(aes(group = chromosome), outlier.shape = NA, fill = "white", alpha = 0.8) +
+  scale_color_manual(values = c("Top 1%" = "red", "Other" = "grey")) +
+  labs(
+    title = "Polymorphic windows per chromosome",
+    x = "Chromosome",
+    y = "Number of polymorphic sites",
+    color = ""
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+ggplot(pixy_clean, aes(x = chromosome, y = count_diffs, color = top1)) +
+  geom_point(position = position_jitter(width = 0.2), size = 1.5, alpha = 1) +  
+  scale_color_manual(values = c("Top 1%" = "red", "Other" = "grey")) +
+  labs(
+    title = "Polymorphic windows per chromosome",
+    x = "Chromosome",
+    y = "Number of polymorphic sites",
+    color = ""
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# -------------------------------
+# Top 1% windows along chromosome NC_063278.1 (same style)
+# -------------------------------
+chrom_focus <- "NC_063278.1"
+
+top_windows <- pixy_clean %>%
+  filter(chromosome == chrom_focus)
+
+ggplot(top_windows, aes(x = window_pos_1, y = count_diffs, color = top1)) +
+  geom_point(position = position_jitter(width = 0.2), size = 1.5, alpha = 1) +  # fully opaque
+  scale_color_manual(values = c("Top 1%" = "red", "Other" = "grey")) +
+  labs(
+    title = paste("Polymorphic windows on", chrom_focus),
+    x = "Genomic position (bp)",
+    y = "Number of polymorphic sites",
+    color = ""
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# -------------------------------
+# ANOVA + Tukey posthoc test
+# -------------------------------
+anova_result <- aov(count_diffs ~ chromosome, data = pixy_clean)
+tukey_result <- TukeyHSD(anova_result)
+
+print(summary(anova_result))
+print(tukey_result)
+
+# -------------------------------
+# Summary statistics for chromosome NC_063278.1
+# -------------------------------
+focus_data <- pixy_clean %>% filter(chromosome == chrom_focus)
+
+cat("\nSummary statistics for chromosome", chrom_focus, ":\n")
+print(summary(focus_data$count_diffs))
