@@ -1,96 +1,107 @@
 #!/bin/bash
-#SBATCH --job-name=nsl_Bter1_0
-#SBATCH --output=nsl_Bter1_0_%j.out
-#SBATCH --error=nsl_Bter1_0_%j.err
+#SBATCH --job-name=xpnsl_BomTerr1_2
+#SBATCH --output=xpnsl_BomTerr1_2_%j.out
+#SBATCH --error=xpnsl_BomTerr1_2_%j.err
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task=20 
 #SBATCH --mem=12G
-#SBATCH --time=10:00:00
+#SBATCH --time=2:00:00
 #SBATCH --partition=parallel
 #SBATCH -C skylake
 #SBATCH --account=m2_jgu-salmosex
 
-#-------------------------------
-# Okay, first things first: load all the necessary stuff
-#-------------------------------
-# Need modules for BCFtools, R, and VCFtools
+# -------------------------------
+# Load the stuff we need
+# -------------------------------
 module purge
-module load bio/BCFtools/1.14-GCC-11.2.0
+# I think we need bcftools to filter VCFs by sample
+module load bio/BCFtools/1.14-GCC-11.2.0 
+# VCFtools might be needed for extra VCF operations
 module load bio/VCFtools/0.1.16-GCC-11.2.0
+# Load R and Bioconductor just in case we need them later
 module load bio/R-bundle-Bioconductor/3.15-foss-2021b-R-4.2.0
 
-#-------------------------------
-# Define where the selscan and norm executables are
-#-------------------------------
+# -------------------------------
+# Set paths and parameters
+# -------------------------------
+VCF_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/Population_genomics_results/xp-nsl/bomterr_new"
+OUTPUT_DIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/Population_genomics_results/xp-nsl/xpnsl_BomTerr1_2"
 SELSCAN="/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/selscan/src/selscan"
-NORM="/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/selscan/src/norm"
 
-#-------------------------------
-# Set up my output directory and get into it
-#-------------------------------
-OUTDIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/Population_genomics_results/xp-nsl/Bter1_0"
-mkdir -p "$OUTDIR"/{variant_files,hap,map,results}
-cd "$OUTDIR"
+# This file tells us which sample belongs to which population
+POP_MAP_FILE="/lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/pop.txt"
 
-#-------------------------------
-# Step 1: Gotta make all my haploid samples look diploid
-#-------------------------------
-# The selscan software needs this format, so I'm converting all 'A' genotypes to 'A|A'
-echo "Converting haploid samples to pseudo-diploid format..."
-bcftools view /lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_org/variantvalling/filtered_variants/vcf_strict/all_bioprojects_snps_strict_filtered_Bter1_0.vcf.gz | \
-awk 'BEGIN {OFS="\t"} { if ($0 !~ /^#/) { for(i=10;i<=NF;i++) { if ($i ~ /^[01]$/) $i = $i"|"$i } } print }' | \
-bgzip > combined_all_samples_pseudo_diploid.vcf.gz
+# Where we're gonna save sample lists
+WILD_SAMPLES="$OUTPUT_DIR/wild_samples.txt"
+COMMERCIAL_SAMPLES="$OUTPUT_DIR/commercial_samples.txt"
 
-#-------------------------------
-# Step 2: Split the big VCF file by chromosome
-#-------------------------------
-# Can't run selscan on the whole thing, so I have to process each chromosome separately.
-echo "Splitting the combined VCF by chromosome..."
-zcat combined_all_samples_pseudo_diploid.vcf.gz | grep -v '#' | cut -f 1 | sort | uniq | while read chr; do
-  vcftools --gzvcf combined_all_samples_pseudo_diploid.vcf.gz \
-           --chr "$chr" \
-           --recode --stdout | bgzip > variant_files/"$chr".vcf.gz
+THREADS=20
+
+# Make output folders if they don't exist yet
+mkdir -p "$OUTPUT_DIR/results"
+mkdir -p "$OUTPUT_DIR/temp" # temp files go here
+
+# -------------------------------
+# Step 1: Make sample lists
+# -------------------------------
+echo "Making sample lists from $POP_MAP_FILE..."
+# grab all wild samples
+awk '$2 == "wild" {print $1}' "$POP_MAP_FILE" > "$WILD_SAMPLES"
+# grab all commercial samples
+awk '$2 == "commercial" {print $1}' "$POP_MAP_FILE" > "$COMMERCIAL_SAMPLES"
+
+# Count samples so we know what we're working with
+WILD_COUNT=$(wc -l < "$WILD_SAMPLES")
+COMM_COUNT=$(wc -l < "$COMMERCIAL_SAMPLES")
+echo "Wild list has $WILD_COUNT samples."
+echo "Commercial list has $COMM_COUNT samples."
+
+# -------------------------------
+# Step 2: Loop through chromosomes and run XP-nSL
+# -------------------------------
+echo "Filtering VCFs and running selscan..."
+
+# Loop through all chromosome VCFs
+for CHR_VCF in $VCF_DIR/phased.NC_*.vcf.gz; do
+    CHR=$(basename $CHR_VCF .vcf.gz)
+    echo "Working on $CHR_VCF"
+
+    # paths for temporary filtered VCFs
+    WILD_VCF="$OUTPUT_DIR/temp/${CHR}_wild.vcf.gz"
+    COMMERCIAL_VCF="$OUTPUT_DIR/temp/${CHR}_commercial.vcf.gz"
+    
+    # Filter for wild samples
+    echo "  - Filtering for wild samples..."
+    bcftools view \
+        --samples-file "$WILD_SAMPLES" \
+        --output-file "$WILD_VCF" \
+        --output-type z \
+        --force-samples \
+        "$CHR_VCF"
+        
+    # Filter for commercial samples
+    echo "  - Filtering for commercial samples..."
+    bcftools view \
+        --samples-file "$COMMERCIAL_SAMPLES" \
+        --output-file "$COMMERCIAL_VCF" \
+        --output-type z \
+        --force-samples \
+        "$CHR_VCF"
+
+    # Run selscan XP-nSL
+    # Note: wild = target, commercial = reference
+    echo "  - Running selscan XP-nSL..."
+    $SELSCAN --threads $THREADS \
+        --xpnsl \
+        --vcf "$WILD_VCF" \
+        --vcf-ref "$COMMERCIAL_VCF" \
+        --out "$OUTPUT_DIR/results/${CHR}_xpnsl"
+        
+    # Remove temporary filtered VCFs to save space
+    echo "  - Deleting temporary VCFs..."
+    rm -f "$WILD_VCF" "$COMMERCIAL_VCF"
 done
 
-#-------------------------------
-# Step 3: Use my R script to convert VCFs to the 'hap' and 'map' format selscan needs
-#-------------------------------
-echo "Converting VCFs to selscan format using R..."
-for vcf_file in variant_files/*.vcf.gz; do
-  base_name=$(basename "$vcf_file" .vcf.gz)
-  Rscript /lustre/miifs01/project/m2_jgu-salmosex/nina/jobscripts/VCF_to_genomatrix_hap.R \
-    "$vcf_file" \
-    hap/"$base_name".gds \
-    hap/"$base_name".hap.out \
-    map/"$base_name".map.out
-done
-
-#-------------------------------
-# Step 4: Finally, run selscan to calculate nSL on each chromosome
-#-------------------------------
-echo "Running selscan..."
-for hap_file in hap/*.hap.out; do
-  base_name=$(basename "$hap_file" .hap.out)
-  $SELSCAN --threads 20 \
-           --nsl \
-           --unphased \
-           --hap "$hap_file" \
-           --map map/"$base_name".map.out \
-           --out results/"$base_name"
-done
-
-#-------------------------------
-# Step 5: Normalize the results from selscan
-#-------------------------------
-echo "Normalizing the selscan output..."
-$NORM --nsl --files results/*out
-
-#-------------------------------
-# Step 6: Add chromosome info to the normalized files for easy identification
-#-------------------------------
-echo "Adding chromosome labels to normalized files..."
-cd results
-for norm_file in *norm; do
-  chrom_name=$(basename "$norm_file" .nsl.out.norm)
-  awk -v chrom="$chrom_name" '{print chrom "\t" $0}' "$norm_file" > "${norm_file}_plus_chrom.txt"
-done
+echo "-------------------------------"
+echo "✅ Done with XP-nSL for all chromosomes."
+echo "Next: you gotta normalize the output files (*.xpnsl.out) to get proper scores."
