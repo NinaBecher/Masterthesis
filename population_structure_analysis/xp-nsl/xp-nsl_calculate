@@ -102,6 +102,3 @@ for CHR_VCF in $VCF_DIR/phased.NC_*.vcf.gz; do
     rm -f "$WILD_VCF" "$COMMERCIAL_VCF"
 done
 
-echo "-------------------------------"
-echo "✅ Done with XP-nSL for all chromosomes."
-echo "Next: you gotta normalize the output files (*.xpnsl.out) to get proper scores."
