@@ -1,0 +1,59 @@
+# ===========================================================
+# Extract SNP regions from VCF and convert to FASTA
+# ===========================================================
+# This script takes our filtered genome-wide VCF, extracts three regions 
+# (two high-FST peaks and a low-FST control region), indexes the VCFs, 
+# and generates  FASTA sequences for each region.
+# ===========================================================
+# -----------------------------
+# Load necessary modules
+# -----------------------------
+module load bio/BCFtools/1.14-GCC-11.2.0
+module load bio/VCFtools/0.1.16-GCC-11.2.0
+
+# -----------------------------
+# Define file paths
+# -----------------------------
+VCF="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/filtered_data/all_BioProjects_combined_nrg/variantcalling/filtered_variants/vcf_strict/all_bioprojects_snps_filtered_BomTerr1_2.haploid_samples_only.vcf.gz"
+REF="/lustre/miifs01/project/m2_jgu-salmosex/nina/data/reference_genomes/iyBomTerr1.2.fna"
+OUTDIR="/lustre/miifs01/project/m2_jgu-salmosex/nina/Population_genomics_results/genetree"
+
+# create output directory if it doesn't exist
+mkdir -p ${OUTDIR}
+
+# -----------------------------
+# Define regions of interest
+# -----------------------------
+# Format: CHR:START-END
+PEAK1="NC_063278.1:19990001-20480000"   # High-FST peak 1
+PEAK2="NC_063278.1:13650001-15260000"   # High-FST peak 2
+CONTROL="NC_063278.1:200001-689999"     # Low-FST control region
+
+# -----------------------------
+# Extract VCFs for each region and index
+# -----------------------------
+echo "Extracting VCF for Peak1..."
+bcftools view -r ${PEAK1} ${VCF} -Oz -o ${OUTDIR}/peak1.vcf.gz
+bcftools index ${OUTDIR}/peak1.vcf.gz
+
+echo "Extracting VCF for Peak2..."
+bcftools view -r ${PEAK2} ${VCF} -Oz -o ${OUTDIR}/peak2.vcf.gz
+bcftools index ${OUTDIR}/peak2.vcf.gz
+
+echo "Extracting VCF for Control region..."
+bcftools view -r ${CONTROL} ${VCF} -Oz -o ${OUTDIR}/control.vcf.gz
+bcftools index ${OUTDIR}/control.vcf.gz
+
+# -----------------------------
+# Convert VCFs to FASTA sequences
+# -----------------------------
+echo "Converting Peak1 VCF to FASTA..."
+bcftools consensus -f ${REF} ${OUTDIR}/peak1.vcf.gz > ${OUTDIR}/peak1.fasta
+
+echo "Converting Peak2 VCF to FASTA..."
+bcftools consensus -f ${REF} ${OUTDIR}/peak2.vcf.gz > ${OUTDIR}/peak2.fasta
+
+echo "Converting Control VCF to FASTA..."
+bcftools consensus -f ${REF} ${OUTDIR}/control.vcf.gz > ${OUTDIR}/control.fasta
+
+echo "All done! FASTA files are saved in ${OUTDIR}"
