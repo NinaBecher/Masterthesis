@@ -1,0 +1,141 @@
+# ===========================================================
+# R Script: Identify high-FST peaks + control region and plot
+# ===========================================================
+
+# --- Load libraries ---
+library(ggplot2)
+library(dplyr)
+
+# --- Parameters ---
+fst_file <- "C:/Users/User/Documents/Masterthesis/Population_genomics/BomTerr1_2/FST/fst_BomTerr1_2.txt"
+chromosome_of_interest <- "NC_063278.1"
+top_percentile <- 0.95                  # top 5% FST bins
+lower_threshold_percentile <- 0.80      # top 20% used for peak expansion
+control_region_end <- 2e6               # control region near chromosome start
+peak1_left_extension <- 500000          # extend peak1 to the left by 500kb
+
+# --- Load FST data ---
+fst_data <- read.table(fst_file, header = TRUE, sep = "\t")
+
+# --- Keep only the chromosome we're interested in ---
+fst_chr <- fst_data %>%
+  filter(chromosome == chromosome_of_interest)
+
+# --- Identify top FST bins ---
+fst_threshold <- quantile(fst_chr$avg_wc_fst, top_percentile, na.rm = TRUE)
+
+high_fst <- fst_chr %>%
+  filter(avg_wc_fst >= fst_threshold) %>%
+  arrange(window_pos_1)
+
+# --- Group contiguous high-FST bins into peaks ---
+high_fst <- high_fst %>%
+  mutate(group = cumsum(c(0, diff(window_pos_1)) > 50000)) # 50kb gap = new peak
+
+# --- Summarize each peak ---
+peaks <- high_fst %>%
+  group_by(group) %>%
+  summarise(start = min(window_pos_1),
+            end = max(window_pos_2),
+            mean_FST = mean(avg_wc_fst),
+            n_bins = n()) %>%
+  arrange(desc(mean_FST))  # sort so strongest peaks first
+
+# Pick the two biggest peaks
+peak1 <- peaks[1, ]
+peak2 <- peaks[2, ]
+
+# --- Lower threshold for expanding peaks ---
+lower_threshold <- quantile(fst_chr$avg_wc_fst, lower_threshold_percentile, na.rm = TRUE)
+
+# --- Function to expand peaks based on lower FST threshold ---
+expand_peak_simple <- function(fst_df, peak, lower_threshold) {
+  # Expand left
+  current_start <- peak$start
+  while(TRUE) {
+    prev_window <- fst_df %>% filter(window_pos_2 == current_start - 1)
+    if(nrow(prev_window) == 0 || prev_window$avg_wc_fst < lower_threshold) break
+    current_start <- prev_window$window_pos_1
+  }
+  peak$start <- current_start
+  
+  # Expand right
+  current_end <- peak$end
+  while(TRUE) {
+    next_window <- fst_df %>% filter(window_pos_1 == current_end + 1)
+    if(nrow(next_window) == 0 || next_window$avg_wc_fst < lower_threshold) break
+    current_end <- next_window$window_pos_2
+  }
+  peak$end <- current_end
+  
+  return(peak)
+}
+
+# --- Expand the two peaks ---
+peak1_expanded <- expand_peak_simple(fst_chr, peak1, lower_threshold)
+peak2_expanded <- expand_peak_simple(fst_chr, peak2, lower_threshold)
+
+# --- Manually extend peak1 to the left ---
+peak1_expanded$start <- max(peak1_expanded$start - peak1_left_extension, min(fst_chr$window_pos_1))
+
+# --- Pick low-FST control region near chromosome start ---
+control_region <- fst_chr %>%
+  filter(window_pos_1 <= control_region_end) %>%
+  arrange(avg_wc_fst) %>%
+  slice(1:5)
+
+control_start <- min(control_region$window_pos_1)
+control_end <- max(control_region$window_pos_2)
+
+# --- Add region labels to FST data ---
+fst_chr <- fst_chr %>%
+  mutate(region_type = case_when(
+    window_pos_1 >= peak1_expanded$start & window_pos_2 <= peak1_expanded$end ~ "Peak1",
+    window_pos_1 >= peak2_expanded$start & window_pos_2 <= peak2_expanded$end ~ "Peak2",
+    window_pos_1 >= control_start & window_pos_2 <= control_end ~ "Control",
+    TRUE ~ "Other"
+  ))
+
+# --- Prepare region positions as caption ---
+region_text <- paste0(
+  "Peak1: ", peak1_expanded$start, "-", peak1_expanded$end, 
+  " | Peak2: ", peak2_expanded$start, "-", peak2_expanded$end, 
+  " | Control: ", control_start, "-", control_end
+)
+
+# --- Final FST plot ---
+ggplot(fst_chr, aes(x = window_pos_1, y = avg_wc_fst, color = region_type)) +
+  geom_point(alpha = 0.5, size = 1.5) +
+  facet_wrap(~chromosome, scales = "free_x") +
+  scale_color_manual(
+    values = c("Peak1" = "red", "Peak2" = "orange", "Control" = "green", "Other" = "grey"),
+    breaks = c("Peak1", "Peak2", "Control")  # remove Other from legend
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    plot.caption = element_text(hjust = 0.5)
+  ) +
+  labs(
+    title = paste("FST Scan Along", chromosome_of_interest),
+    subtitle = "Regions where wild and commercial populations differ most (for gene tree analysis)",
+    x = "Genomic Window Start (bp)",
+    y = "Average WC FST",
+    color = "Regions Marked",
+    caption = region_text
+  )
+
+# --- Save the expanded peaks and control coordinates ---
+output_coords <- data.frame(
+  Region = c("Peak1", "Peak2", "Control"),
+  Start = c(peak1_expanded$start, peak2_expanded$start, control_start),
+  End = c(peak1_expanded$end, peak2_expanded$end, control_end)
+)
+
+write.table(output_coords,
+            file = "FST_high_peaks_and_control_regions_expanded_left.txt",
+            sep = "\t",
+            row.names = FALSE,
+            quote = FALSE)
