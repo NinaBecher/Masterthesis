@@ -1,0 +1,50 @@
+
+library(dplyr)
+library(ggplot2)
+
+# Set working directory and read Pixy output
+setwd("C:/Users/User/Documents/Masterthesis/Population_genomics/BomTerr1_2/pi")
+pi_data <- read.table("pi.txt", header = TRUE, sep = "\t")
+
+# --------------------------------------------------------
+# Compute chromosome-level polymorphism per population
+# --------------------------------------------------------
+chrom_poly_pop <- pi_data %>%
+  group_by(pop, chromosome) %>%
+  summarise(obs_poly = sum(avg_pi * no_sites, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(pop) %>%
+  mutate(
+    total_poly = sum(obs_poly),          # total polymorphism per population
+    n_chrom = n(),                        # number of chromosomes
+    expected = total_poly / n_chrom,      # expected polymorphism per chromosome
+    std_resid = (obs_poly - expected) / sqrt(expected)  # standardized residuals
+  ) %>%
+  ungroup()
+
+# --------------------------------------------------------
+# Chi-square test per population
+# --------------------------------------------------------
+chi_results <- chrom_poly_pop %>%
+  group_by(pop) %>%
+  summarise(
+    chi2 = sum((obs_poly - expected)^2 / expected),
+    df = n() - 1,
+    p_value = pchisq(chi2, df = df, lower.tail = FALSE)
+  )
+
+# --------------------------------------------------------
+# Plot standardized residuals for both populations
+# --------------------------------------------------------
+ggplot(chrom_poly_pop, aes(x = reorder(chromosome, std_resid), 
+                           y = std_resid, fill = pop)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
+  coord_flip() +
+  labs(
+    x = "Chromosome", 
+    y = "Standardized Residual (π)", 
+    title = "Chromosome-level Polymorphism: Wild vs Commercial"
+  ) +
+  scale_fill_manual(values = c("wild" = "#1b9e77", "commercial" = "#d95f02")) + 
+  theme_minimal(base_size = 14) +
+  theme(legend.title = element_blank())
